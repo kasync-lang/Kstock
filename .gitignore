@@ -208,4 +208,6 @@ __marimo__/
 private.pem
 .venv/
 public.pem
+tmp/
+
 
