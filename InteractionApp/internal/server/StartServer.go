@@ -9,10 +9,12 @@ import (
 )
 
 func StartServer() {
+
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Printf("Error loading .env file")
+		log.Printf("Error loading .env file: %v", err.Error())
 	}
+
 	cfg := config.LoadConfig()
 	if cfg == nil {
 		log.Printf("Load Config error")
