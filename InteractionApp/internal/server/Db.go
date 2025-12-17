@@ -16,7 +16,7 @@ var (
 func IntiDB() (*sqlx.DB, error) {
 	var err error
 	once.Do(func() {
-		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", config.Cfg.Urldatabase, config.Cfg.Userdatabase, config.Cfg.Passworddatabase, config.Cfg.Databasename)
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=5", config.Cfg.Urldatabase, config.Cfg.Userdatabase, config.Cfg.Passworddatabase, config.Cfg.Databasename)
 		instance, err = sqlx.Connect("postgres", dsn)
 		if err != nil {
 			return

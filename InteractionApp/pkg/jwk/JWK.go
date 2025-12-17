@@ -1,4 +1,4 @@
-package jwt
+package jwk
 
 type JWK struct {
 	E   string `json:"e"`

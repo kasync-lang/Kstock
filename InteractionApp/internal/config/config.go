@@ -14,6 +14,11 @@ type Config struct {
 	AuthenHost       string
 }
 
+func (c Config) String() string {
+	//TODO implement me
+	return "Config{APPPort:" + c.APPPort + ", Urldatabase:" + c.Urldatabase + ", Databasename:" + c.Databasename + ", Userdatabase:" + c.Userdatabase + ", Passworddatabase:" + c.Passworddatabase + ", AuthenHost:" + c.AuthenHost + "}"
+}
+
 var (
 	Cfg  *Config
 	once sync.Once

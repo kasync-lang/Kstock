@@ -2,19 +2,17 @@ package main
 
 import (
 	// "Kstock/internal/server"
-	// "Kstock/pkg/jwt"
+	// "Kstock/pkg/jwk"
 	// "fmt"
 
 	"Kstock/internal/api"
 	"Kstock/internal/server"
-	"Kstock/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	server.StartServer()
-	key, err := jwt.GetRawJWK()
 	// fmt.Print(key)
 	r := gin.Default()
 

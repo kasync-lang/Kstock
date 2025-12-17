@@ -2,7 +2,7 @@ package server
 
 import (
 	"Kstock/internal/config"
-	"Kstock/pkg/jwt"
+	"Kstock/pkg/jwk"
 	"log"
 
 	"github.com/joho/godotenv"
@@ -21,15 +21,17 @@ func StartServer() {
 	} else {
 		log.Printf("Load Config success")
 	}
-	_, err2 := IntiDB()
-	if err2 != nil {
-		log.Printf("Init DB error, %s", err.Error())
-	} else {
-		log.Printf("Init DB success")
-	}
-	if _, err := jwt.GetKeystore(); err != nil {
+	log.Printf("Starting Server")
+
+	if _, err := jwk.GetKeystore(); err != nil {
 		log.Fatal("JWT Keystore Error")
 	} else {
 		log.Printf("JWT Keystore success")
+	}
+	instance, err2 := IntiDB()
+	if err2 != nil {
+		log.Fatal("Init DB error", err2)
+	} else {
+		log.Printf("Init DB success %v", instance)
 	}
 }
