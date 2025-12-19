@@ -4,10 +4,10 @@ import (
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
+	"strings"
 )
 
 func GetSymbols(c *gin.Context) {
@@ -38,7 +38,7 @@ WHERE (name LIKE $1 OR ticker LIKE $1)
 ORDER BY %s
 `, orderBy)
 	symbol := dto.SymbolPublic{}
-	row, err := db.Queryx(query, query_symbol.Name+"%", query_symbol.Exhange+"%")
+	row, err := db.Queryx(query, strings.ToUpper(query_symbol.Name)+"%", query_symbol.Exhange+"%")
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
@@ -61,7 +61,7 @@ func GetSymbolDetail(c *gin.Context) {
 	db := server.GetDB()
 	log.Println(db)
 	symbolDetail := dto.SymbolBaseDetail{}
-	err := db.Get(&symbolDetail, `SELECT * FROM company_profile WHERE ticker=$1`, symbol)
+	err := db.Get(&symbolDetail, `SELECT * FROM company_profile WHERE ticker=$1`, strings.ToUpper(symbol))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return

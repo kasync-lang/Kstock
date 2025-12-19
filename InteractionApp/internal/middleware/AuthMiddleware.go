@@ -29,7 +29,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		claims, err := jwk.Verify(tokenStr)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token: " + err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
 		}

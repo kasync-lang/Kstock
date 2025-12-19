@@ -15,7 +15,6 @@ func main() {
 	server.StartServer()
 	// fmt.Print(key)
 	r := gin.Default()
-
 	api.RegisterAllRoutes(r)
 	r.Run(":8080")
 }
