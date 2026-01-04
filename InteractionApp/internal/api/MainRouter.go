@@ -15,4 +15,5 @@ func RegisterAllRoutes(routes *gin.Engine) {
 	RegisterSymbolRoutes(main_route)
 	RegisterFavoriteRoutes(main_route)
 	RegisterNoteRoutes(main_route)
+	RegisterAlertRoutes(main_route)
 }
