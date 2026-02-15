@@ -15,7 +15,6 @@ var (
 		WriteBufferSize: 1024,
 		//CheckOrigin:     checkOrigin,
 	}
-	dataflow_chanel = make(chan []byte, 1000)
 )
 
 type Message struct {
@@ -30,7 +29,7 @@ type Manager struct {
 }
 
 // go
-func NewManager(ctx context.Context) *Manager {
+func NewManager(ctx context.Context, cfg *Config) *Manager {
 	m := &Manager{
 		clients:  make(map[*Client]bool),
 		handlers: make(map[string]EventHandler),
@@ -38,7 +37,7 @@ func NewManager(ctx context.Context) *Manager {
 	m.SetupEventHandlers()
 	eventBus := NewEventBus(1000)
 
-	go GetData(ctx, eventBus)
+	go GetData(ctx, eventBus, cfg)
 
 	go func() {
 		eventCh := eventBus.subscribe()
@@ -108,25 +107,23 @@ func (m *Manager) eventHandler(subscription Subscription, c *Client) error {
 }
 func (m *Manager) publish(symbol string, event Event) error {
 	m.RLock()
+
 	clients := make([]*Client, 0, len(m.clients))
 	for client := range m.clients {
-		log.Println("client:", client)
 		if client.subs[symbol] {
 			clients = append(clients, client)
 		}
 	}
 	m.RUnlock()
-
 	for _, client := range clients {
 		e := event // copy
 		select {
 		case client.send <- e:
-			log.Println("hub published event:", e.Key)
 		default:
+			log.Println("connection has been closed at hub publish")
 			m.removeClient(client)
 		}
 	}
-	log.Println("hub publish finished")
 	return nil
 }
 

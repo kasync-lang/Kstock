@@ -12,10 +12,12 @@ import (
 )
 
 func main() {
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	cfg := Load()
 
-	m := NewManager(ctx)
+	m := NewManager(ctx, &cfg)
 
 	srv := &http.Server{
 		Addr:    ":8080",

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -10,13 +11,13 @@ import (
 )
 
 // go
-func GetData(ctx context.Context, bus *EventBus) {
-	broker := []string{"192.168.2.100:29092"}
+func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
+	broker := []string{fmt.Sprintf("%s:%d", cfg.KAFKAHost, cfg.KAFKAPort)}
 
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     broker,
-		Topic:       "raw_data_trade",
-		GroupID:     "fake_raw_data_trade1",
+		Topic:       cfg.KAFKATopic,
+		GroupID:     cfg.KAFKAGroupID,
 		MinBytes:    10e3,
 		MaxBytes:    10e6,
 		StartOffset: kafka.LastOffset,
@@ -52,7 +53,6 @@ func GetData(ctx context.Context, bus *EventBus) {
 
 		// reset backoff khi đọc thành công
 		backoff = time.Second
-
 		bus.Publish(Event{
 			Key:  string(m.Key),
 			Data: m.Value,

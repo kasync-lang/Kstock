@@ -8,6 +8,14 @@ type Subscription struct {
 	Type   string `json:"type"`
 	Symbol string `json:"symbol"`
 }
+
+type Tick struct {
+	P float64 `json:"p"`
+	S string  `json:"s"`
+	T int64   `json:"t"`
+	V int64   `json:"v"`
+}
+
 type EventBus struct {
 	channel chan Event
 }
@@ -20,7 +28,6 @@ func NewEventBus(bufferSize int) *EventBus {
 func (b *EventBus) Publish(event Event) {
 	select {
 	case b.channel <- event:
-		
 	default:
 	}
 }

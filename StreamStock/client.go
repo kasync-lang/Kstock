@@ -26,7 +26,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 	return &Client{
 		connection: conn,
 		manager:    manager,
-		send:       make(chan Event),
+		send:       make(chan Event, 256),
 		subs:       make(map[string]bool),
 	}
 }
@@ -53,7 +53,7 @@ func (c *Client) ReadMessages() {
 		var request Subscription
 		if err := json.Unmarshal(payload, &request); err != nil {
 			log.Println("Error unmarshaling message:", err)
-			break
+			continue
 		}
 		log.Println(request)
 		err = c.manager.eventHandler(request, c)
@@ -73,20 +73,20 @@ func (c *Client) WriteMessages() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			log.Println(message, " from client write message")
 			if !ok {
 				if err := c.connection.WriteMessage(websocket.CloseMessage, nil); err != nil {
 					log.Println("Connection closed:", err)
 				}
 				return
 			}
+			var tick Tick
+			err := json.Unmarshal(message.Data, &tick)
 
-			data, err := json.Marshal(message)
 			if err != nil {
-				log.Println("Error marshaling message:", err)
+				log.Println("Error marshaling1 message:", err)
 				continue
 			}
-			if err := c.connection.WriteMessage(websocket.TextMessage, data); err != nil {
+			if err := c.connection.WriteJSON(tick); err != nil {
 				log.Println("Error writing message:", err)
 
 			}
