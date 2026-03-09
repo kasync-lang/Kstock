@@ -209,5 +209,8 @@ private.pem
 .venv/
 public.pem
 tmp/
-
-
+./InteractionApp/data
+InteractionApp/data/
+*.env
+*.idea
+*Dockerfile

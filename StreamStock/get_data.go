@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/segmentio/kafka-go"
 	"log"
 	"time"
-
-	"github.com/segmentio/kafka-go"
 )
 
 // go
@@ -32,7 +31,7 @@ func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
 		m, err := r.ReadMessage(ctx)
 		if err != nil {
 
-			// 1. Context bị cancel → shutdown chuẩn
+			// 1. Context bị cancel → shutdown 
 			if errors.Is(err, context.Canceled) ||
 				errors.Is(err, context.DeadlineExceeded) {
 				log.Println("kafka reader stopped by context")
