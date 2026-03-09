@@ -1,0 +1,31 @@
+
+  version: "3.9"
+
+  services:
+   db:
+     image: postgres:latest
+     container_name: postgres-db
+     restart: unless-stopped
+     environment:
+       POSTGRES_USER: postgres
+       POSTGRES_PASSWORD: postgres
+       POSTGRES_DB: mydatabase
+     ports:
+       - "5432:5432"
+     volumes:
+       - postgres_data:/var/lib/postgresql/data
+    clapp:
+      image: nguyenkhoir2/collectdata-app
+      build:
+        context: .
+        dockerfile: Dockerfile
+      environment:
+        ENV_PATH: .env
+      volumes:
+        - ./:/app
+
+
+
+  # volumes:
+  #   postgres_data:
+  #     external: true
