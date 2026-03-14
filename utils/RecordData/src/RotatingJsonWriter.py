@@ -35,6 +35,10 @@ class RotatingJSONLWriter:
         self.current_file.close()
         self.file_index += 1
         self._open_new_file()
+    def _reset_date(self):
+        self.current_size = 0
+        self.last_used_ts = time.time()
+        self._rotate()
 
     def write(self, record):
         """ record must be dict or JSON string """

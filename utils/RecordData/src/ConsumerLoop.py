@@ -2,10 +2,10 @@ import signal
 
 running = True
 from confluent_kafka import Consumer, KafkaException, KafkaError
-from WriterPool import WriterPool
+from src.WriterPool import WriterPool
 import json
 import time
-from config import settings
+from src.config import settings
 
 import logging
 
@@ -31,14 +31,13 @@ def worker():
     #     consumer.commit(offsets=partitions, asynchronous=False)
     writer = WriterPool(base_dir=settings.RAW_DATA_DIR, max_size_mb=500, idle_timeout_sec=300)
     def process_message(data: dict):
-
-
-
         logging.info(f"Processing order {data}")
         symbol = data["s"]
         writer.write(symbol, data)
+        writer.maybe_cleanup()
         if data.get("force_fail"):
             raise RuntimeError("Temporary error")
+
     def shutdown(sig, frame):
         global running
         running = False
@@ -99,3 +98,4 @@ def worker():
     finally:
         logging.info("Closing consumer")
         consumer.close()
+        logging.info("Commited messages")

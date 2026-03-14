@@ -34,7 +34,7 @@ if __name__ == "__main__":
     RAW_PATH = './data/raw'
     OUTPUT_PATH = './data/merged'
     list_symbols= []
-    with open('./list_symbol.txt', 'r') as f:
+    with open('list_symbol.txt', 'r') as f:
         for line in f:
             list_symbols.append(line.strip())
     assert len(list_symbols)>0
