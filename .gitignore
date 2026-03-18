@@ -213,4 +213,4 @@ tmp/
 InteractionApp/data/
 *.env
 *.idea
-*Dockerfile
+*Dockerfile*

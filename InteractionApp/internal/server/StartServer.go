@@ -24,7 +24,7 @@ func StartServer() {
 	log.Printf("Starting Server")
 
 	if _, err := jwk.GetKeystore(); err != nil {
-		log.Fatal("JWT Keystore Error")
+		log.Fatal("JWT Keystore Error", err.Error())
 	} else {
 		log.Printf("JWT Keystore success")
 	}

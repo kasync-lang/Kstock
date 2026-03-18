@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"sync"
@@ -42,11 +43,12 @@ func BuildRSAKeyFromJWK(nB64Url, eB64Url string) (*rsa.PublicKey, error) {
 func GetRawJWK() (*JWK, error) {
 	jwkURL := config.Cfg.AuthenHost
 	resp, err := http.Get(jwkURL)
+
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -62,13 +64,18 @@ func GetRawJWK() (*JWK, error) {
 }
 
 func GetKeystore() (*rsa.PublicKey, error) {
+
 	once.Do(func() {
-		jwk_data, err := GetRawJWK()
+		jwkData, err := GetRawJWK()
+		log.Println("jwk_data", jwkData)
 		if err != nil {
+
 			return
 		}
-		publicKeyCache, err = BuildRSAKeyFromJWK(jwk_data.N, jwk_data.E)
+		publicKeyCache, err = BuildRSAKeyFromJWK(jwkData.N, jwkData.E)
+		log.Print(publicKeyCache)
 	})
+
 	if publicKeyCache == nil {
 		return nil, errors.New("failed to get public key")
 	}

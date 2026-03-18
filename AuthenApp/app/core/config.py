@@ -1,6 +1,4 @@
-from datetime import timedelta
-
-from cryptography.hazmat.primitives import serialization
+import logging
 import os
 from pydantic import EmailStr, AnyUrl, BeforeValidator, model_validator, computed_field
 from typing import Literal, Annotated, Any
@@ -9,16 +7,18 @@ from typing_extensions import Self
 import warnings
 
 
-BASEDIR = os.path.abspath(os.path.dirname(__file__))
-class KeyStore():
+BASEDIR = os.getenv("PRIVATE_KEY_PATH")
+class KeyStore:
     private_key = None
     public_key = None
     @classmethod
     def load_key(cls):
 
-        private_key_pem_path = os.path.join(BASEDIR, "../../private.pem")
-        public_key_pem_path = os.path.join(BASEDIR, "../../public.pem")
-        if cls.private_key is None:
+        private_key_pem_path = os.path.join(BASEDIR, "private.pem")
+        public_key_pem_path = os.path.join(BASEDIR, "public.pem")
+        logging.warning("Loading private key from: {}".format(private_key_pem_path))
+        logging.warning("Loading public key from: {}".format(public_key_pem_path))
+        if cls.private_key is None or cls.public_key is None:
             with open(private_key_pem_path, "rb") as key_file:
                 cls.private_key = key_file.read()
             with open(public_key_pem_path, "rb") as key_file:
@@ -31,7 +31,7 @@ def parse_cors(v: Any) -> list[str] | str:
     raise ValueError(v)
 class Setting(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=os.path.join(BASEDIR, "..","..",".env"),
+        env_file=os.path.join(BASEDIR,".env"),
         env_ignore_empty=True,
         extra="ignore"
     )
@@ -58,6 +58,7 @@ class Setting(BaseSettings):
     EMAILS_FROM_NAME: EmailStr | None = None
     PROJECT_NAME: str | None = None
     FRONTEND_HOST: str
+    MONGO_URI:str
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:
         if not self.EMAILS_FROM_NAME:

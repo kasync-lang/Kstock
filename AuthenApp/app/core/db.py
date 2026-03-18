@@ -1,12 +1,13 @@
-import asyncio
+
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClient
 from beanie import init_beanie
 import os
 from app.model.User import User
+from app.core.config import settings
 
 
 async def init_db():
-        uri_db = os.getenv("MONGO_URI")
+        uri_db = settings.MONGO_URI
         if not uri_db:
                 raise ValueError("MongoDB URI not found")
         client = AsyncIOMotorClient(uri_db)
