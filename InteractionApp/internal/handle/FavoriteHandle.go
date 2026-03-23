@@ -61,6 +61,7 @@ func AddFavorite(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(500, gin.H{"error": "Internal Server Error"})
+		log.Printf("Error adding favorite: %v", err)
 		c.Abort()
 		return
 	}

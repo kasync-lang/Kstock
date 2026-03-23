@@ -336,6 +336,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SymbolDetail"
+  /assets:
+    get:
+      tags:
+        - asset
+      summary: Get all assets
+      responses:
+        "200":
+          description: Danh sách tất cả assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Asset"
+
 
 components:
   securitySchemes:
@@ -357,7 +372,15 @@ components:
           type: string
         symbol:
           type: string
-
+    Asset:
+      type: object
+      properties:
+        symbol:
+          type: string
+        amount:
+          type: number
+        unitPrice:
+          type: number
     FavoriteInput:
       type: object
       required: [ symbol]

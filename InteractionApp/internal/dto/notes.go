@@ -6,7 +6,7 @@ type NoteCreate struct {
 	Content string `json:"content" db:"content"`
 }
 type NotePublic struct {
-	ID    int    `json:"id" db:"note_id"`
+	ID    string `json:"id" db:"note_id"`
 	Title string `json:"title" db:"title"`
 }
 type NoteDetail struct {
@@ -17,7 +17,7 @@ type NoteDetail struct {
 	CreateAt string `json:"created_at" db:"created_at"`
 }
 type NoteUpdate struct {
-	ID      int     `json:"id" db:"note_id"`
+	ID      string  `json:"id" db:"note_id"`
 	Title   *string `json:"title" db:"title"`
 	Content *string `json:"content" db:"content"`
 }

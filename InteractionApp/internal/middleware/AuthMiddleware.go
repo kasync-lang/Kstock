@@ -47,7 +47,7 @@ func TemporaryRegiterUser(claims jwt.Claims, c *gin.Context) {
 		return
 	}
 	db := server.GetDB()
-	query_insert := `insert into "user" (user_id) values ($1) on conflict (user_id) do nothing`
+	query_insert := `insert into user_table (id) values ($1) on conflict (id) do nothing`
 	tx := db.MustBegin()
 	tx.MustExec(query_insert, sub)
 	err = tx.Commit()
