@@ -8,9 +8,3 @@ type Asset struct {
 type Assets struct {
 	Data []Asset `json:"data" db:"_"`
 }
-
-type Order struct {
-	Symbol    string `json:"symbol" db:"symbol"`
-	Quantity  int    `json:"quantity" db:"quantity"`
-	Operation string `json:"operation" db:"operation"`
-}

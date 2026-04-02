@@ -6,12 +6,15 @@ import (
 )
 
 type Config struct {
-	APPPort          string
-	Urldatabase      string
-	Databasename     string
-	Userdatabase     string
-	Passworddatabase string
-	AuthenHost       string
+	APPPort            string
+	Urldatabase        string
+	Databasename       string
+	Userdatabase       string
+	Passworddatabase   string
+	AuthenHost         string
+	KafkaBootrapServer string
+	KafkaTopic         string
+	KafkaGroupID       string
 }
 
 func (c Config) String() string {
@@ -27,13 +30,14 @@ var (
 func LoadConfig() *Config {
 	once.Do(func() {
 		Cfg = &Config{
-			APPPort:          os.Getenv("APP_PORT"),
-			Urldatabase:      os.Getenv("URLDATABASE"),
-			Databasename:     os.Getenv("DATABASENAME"),
-			Userdatabase:     os.Getenv("USERDATABASE"),
-			Passworddatabase: os.Getenv("PASSWORDDATABASE"),
-			AuthenHost:       os.Getenv("AUTHTHEN_HOST"),
-		}
+			APPPort:            os.Getenv("APP_PORT"),
+			Urldatabase:        os.Getenv("URLDATABASE"),
+			Databasename:       os.Getenv("DATABASENAME"),
+			Userdatabase:       os.Getenv("USERDATABASE"),
+			Passworddatabase:   os.Getenv("PASSWORDDATABASE"),
+			AuthenHost:         os.Getenv("AUTHTHEN_HOST"),
+			KafkaBootrapServer: os.Getenv("KAFKA_BOOTSTRAP_SERVERS"),
+			KafkaTopic:         os.Getenv("KAFKA_TOPIC")}
 	})
 	return Cfg
 }

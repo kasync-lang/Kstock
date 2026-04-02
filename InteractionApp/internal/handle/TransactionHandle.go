@@ -61,6 +61,9 @@ func rollbackTx(tx *sqlx.Tx) {
 func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string, price float64, c *gin.Context) {
 	// Start transaction
 	tx, err := db.Beginx()
+	var dataBuyResponse dto.BuyOrderResponse
+	dataBuyResponse.Symbol = symbol
+	dataBuyResponse.Amount = amount
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 		log.Printf("Failed to begin transaction: %v", err)
@@ -81,7 +84,7 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 
 	// Calculate required balance
 	required_balance := float64(amount) * price
-
+	dataBuyResponse.TotalCost = required_balance
 	// Check if user has enough balance
 	if usd_balance < required_balance {
 		rollbackTx(tx)
@@ -115,7 +118,7 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 	new_symbol_amount := amount + old_symbol_amount
 	new_unit_price := (float64(old_symbol_amount)*old_unit_price + float64(amount)*price) / float64(new_symbol_amount)
 	new_usd_balance := usd_balance - required_balance
-
+	dataBuyResponse.TotalHoldings = new_symbol_amount
 	// Update USD balance
 	_, err = tx.Exec(`UPDATE assets SET quantity = $1 WHERE user_id = $2 AND symbol = 'USD'`, new_usd_balance, user_id)
 	if err != nil {
@@ -125,6 +128,7 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		c.Abort()
 		return
 	}
+	dataBuyResponse.NewUsdBalance = new_usd_balance
 
 	// Upsert symbol holdings
 	_, err = tx.Exec(`
@@ -140,6 +144,7 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		c.Abort()
 		return
 	}
+	dataBuyResponse.NewUnitPrice = new_unit_price
 
 	// Insert transaction history
 	_, err = tx.Exec(`
@@ -162,23 +167,19 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		c.Abort()
 		return
 	}
+	dataBuyResponse.Message = "BUY transaction successful"
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":          "BUY transaction successful",
-		"symbol":           symbol,
-		"amount":           amount,
-		"price":            price,
-		"total_cost":       required_balance,
-		"new_usd_balance":  new_usd_balance,
-		"new_unit_price":   new_unit_price,
-		"total_holdings":   new_symbol_amount,
-	})
+	c.JSON(http.StatusOK, dataBuyResponse)
 	log.Printf("BUY transaction completed: user=%s, symbol=%s, amount=%d, price=%.2f", user_id, symbol, amount, price)
 }
 
 func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string, price float64, c *gin.Context) {
 	// Start transaction
 	tx, err := db.Beginx()
+	var dataSellResponse dto.SellOrderResponse
+	dataSellResponse.Symbol = symbol
+	dataSellResponse.Amount = amount
+	dataSellResponse.Price = price
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 		log.Printf("Failed to begin transaction: %v", err)
@@ -230,6 +231,7 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		c.Abort()
 		return
 	}
+	dataSellResponse.TotalProceeds = sale_proceeds
 
 	// Update or delete symbol holdings
 	if new_symbol_amount > 0 {
@@ -245,6 +247,8 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		c.Abort()
 		return
 	}
+	dataSellResponse.NewUsdBalance = new_usd_balance
+	dataSellResponse.RemainingHoldings = new_symbol_amount
 
 	// Insert transaction history
 	_, err = tx.Exec(`
@@ -267,16 +271,8 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		c.Abort()
 		return
 	}
+	dataSellResponse.Message = "BUY transaction successful"
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":             "SELL transaction successful",
-		"symbol":              symbol,
-		"amount":              amount,
-		"price":               price,
-		"total_proceeds":      sale_proceeds,
-		"new_usd_balance":     new_usd_balance,
-		"remaining_holdings":  new_symbol_amount,
-	})
+	c.JSON(http.StatusOK, dataSellResponse)
 	log.Printf("SELL transaction completed: user=%s, symbol=%s, amount=%d, price=%.2f", user_id, symbol, amount, price)
 }
-
