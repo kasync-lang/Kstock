@@ -26,7 +26,7 @@ type KafkaListenerConfig struct {
 
 func (c *KafkaListenerConfig) applyDefault() {
 	if c.MinBytes <= 0 {
-		c.MinBytes = 10e3
+		c.MinBytes = 10e2
 	}
 	if c.MaxBytes <= 0 {
 		c.MaxBytes = 10e6
@@ -72,6 +72,7 @@ func EventKafkaListener(ctx context.Context, cfg KafkaListenerConfig, handler Ka
 		MaxBytes: cfg.MaxBytes,
 		MaxWait:  cfg.MaxWait,
 	})
+	reader.SetOffset(kafka.LastOffset)
 	defer func() {
 		if err := reader.Close(); err != nil {
 			log.Printf("kafka listener: close reader error topic=%s group=%s err=%v", cfg.Topic, cfg.GroupID, err)

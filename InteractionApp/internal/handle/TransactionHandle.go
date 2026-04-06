@@ -4,14 +4,13 @@ import (
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
 	"database/sql"
+	"log"
+	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jmoiron/sqlx"
-
-	"log"
-	"net/http"
-	"strings"
 )
 
 func TransactionHandle(c *gin.Context) {
@@ -39,12 +38,25 @@ func TransactionHandle(c *gin.Context) {
 
 	operation := strings.ToUpper(order_data.Operation)
 	db := server.GetDB()
-
+	v, ok := c.Get("price_store")
+	ps, ok2 := v.(*dto.PriceStore)
+	if !ok2 || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+	priceToProcess, ok := ps.Get(order_data.Symbol)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		log.Printf("Error binding order data: %v", order_data.Symbol)
+		c.Abort()
+		return
+	}
 	switch operation {
 	case "BUY":
-		BuyTransactionHandle(db, sub, order_data.Quantity, order_data.Symbol, 100.5, c)
+		BuyTransactionHandle(db, sub, order_data.Quantity, order_data.Symbol, priceToProcess, c)
 	case "SELL":
-		SellTransactionHandle(db, sub, order_data.Quantity, order_data.Symbol, 100.5, c)
+		SellTransactionHandle(db, sub, order_data.Quantity, order_data.Symbol, priceToProcess, c)
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid operation"})
 		c.Abort()

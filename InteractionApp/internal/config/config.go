@@ -37,7 +37,8 @@ func LoadConfig() *Config {
 			Passworddatabase:   os.Getenv("PASSWORDDATABASE"),
 			AuthenHost:         os.Getenv("AUTHTHEN_HOST"),
 			KafkaBootrapServer: os.Getenv("KAFKA_BOOTSTRAP_SERVERS"),
-			KafkaTopic:         os.Getenv("KAFKA_TOPIC")}
+			KafkaTopic:         os.Getenv("KAFKA_TOPIC"),
+			KafkaGroupID:       os.Getenv("KAFKA_GROUP_ID")}
 	})
 	return Cfg
 }

@@ -3,16 +3,25 @@ package handle
 import (
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func GetAsset(c *gin.Context) {
 	claims, ok := c.Get("claims")
+	v, ok := c.Get("price_store")
+	ps, ok2 := v.(*dto.PriceStore)
+	if !ok || !ok2 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+		c.Abort()
+		log.Printf("Failed to get price store from context")
+		return
+	}
 	sub, err := claims.(jwt.MapClaims).GetSubject()
-	if !ok || err != nil {
+	if err != nil {
 		c.JSON(401, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
@@ -28,7 +37,6 @@ func GetAsset(c *gin.Context) {
 		return
 
 	}
-	log.Printf("hehe")
 	defer rows.Close()
 	for rows.Next() {
 		var asset dto.Asset
@@ -38,9 +46,23 @@ func GetAsset(c *gin.Context) {
 			c.Abort()
 			return
 		}
+		value, ok := ps.Get(asset.Symbol)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+			c.Abort()
+			log.Printf("Price for symbol %s not found in price store", asset.Symbol)
+		}
+		asset.MarketValue = value
+		loss := asset.Quantity * (value - asset.Price)
+		asset.ProfitAndLoss = loss
 		assets.Data = append(assets.Data, asset)
 
 	}
+	var combineProfit float64 = 0
+	for _, asset := range assets.Data {
+		combineProfit += asset.ProfitAndLoss
+	}
+	assets.AllProfitAndLoss = combineProfit
 	if err := rows.Err(); err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
