@@ -13,9 +13,13 @@ async def create_user(*, user_create: UserCreate) -> User:
     # Remove password from user_create data before validation
     user_data = user_create.model_dump(exclude={"password","is_superuser"})
     user_data["hashed_password"] = get_password_hash(user_create.password)
-    user_data["role"] = "admin" if user_create.is_superuser else "basic_user"
+    user_data["role"] = "basic_user" #default role
     db_obj = User(**user_data)
-    await db_obj.save()
+    db_user = await get_user_by_email(email=user_data["email"])
+    if db_user:
+        return db_obj
+    else:
+        await db_obj.save()
     return db_obj
 
 
@@ -31,7 +35,7 @@ async def update_user(*, db_user: User, user_in: UserUpdate) -> Any:
 
 
 
-async def get_user_by_email(*, email:str) -> User:
+async def get_user_by_email(*, email:str) -> User | None:
     return await User.find_one(User.email==email)
 
 

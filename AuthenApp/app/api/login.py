@@ -49,12 +49,12 @@ async def register_user(user_in: UserRegister, background_tasks: BackgroundTasks
     if not user or not user.is_verified:
         if not is_strong_password(user_in.password):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too weak")
-        if user.is_verified:
-            await User.find_one(User.id == ObjectId(user_in.user_id)).delete()
+            return
         user_create = UserCreate.model_validate(user_in.model_dump(exclude_unset=True))
         email_data = generate_signup_verify_email(email=user_in.email, token=generate_password_reset_token(user_in.email))
         background_tasks.add_task(send_email,email_to = user_in.email, subject=email_data.subject, html_content=email_data.html_content )
-        user = await crud.create_user(user_create=user_create)
+        if not user:
+            user = await crud.create_user(user_create=user_create)
     else:
         raise HTTPException(status_code=409, detail="User already exists")
     return parse_user_db_to_currentuser(user)

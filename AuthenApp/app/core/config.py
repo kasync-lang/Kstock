@@ -7,15 +7,15 @@ from typing_extensions import Self
 import warnings
 
 
-BASEDIR = os.getenv("PRIVATE_KEY_PATH")
+KEY_DIR = os.getenv("PRIVATE_KEY_PATH")
 class KeyStore:
     private_key = None
     public_key = None
     @classmethod
     def load_key(cls):
 
-        private_key_pem_path = os.path.join(BASEDIR, "private.pem")
-        public_key_pem_path = os.path.join(BASEDIR, "public.pem")
+        private_key_pem_path = os.path.join(KEY_DIR, "private.pem")
+        public_key_pem_path = os.path.join(KEY_DIR, "public.pem")
         logging.warning("Loading private key from: {}".format(private_key_pem_path))
         logging.warning("Loading public key from: {}".format(public_key_pem_path))
         if cls.private_key is None or cls.public_key is None:
@@ -31,7 +31,7 @@ def parse_cors(v: Any) -> list[str] | str:
     raise ValueError(v)
 class Setting(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=os.path.join(BASEDIR,".env"),
+        env_file=os.path.join(KEY_DIR,".env"),
         env_ignore_empty=True,
         extra="ignore"
     )
@@ -65,7 +65,7 @@ class Setting(BaseSettings):
             self.EMAILS_FROM_NAME = self.PROJECT_NAME
         return self
 
-    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
+    EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 1
 
     @computed_field  # type: ignore[prop-decorator]
     @property

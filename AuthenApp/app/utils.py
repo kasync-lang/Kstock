@@ -49,19 +49,18 @@ def send_email(
     part = MIMEText(html_content, "html")
     msg.attach(part)
 
+
     try:
         if settings.SMTP_SSL:
             server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT)
         else:
             server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
 
-        # Bắt tay TLS nếu có
         if settings.SMTP_TLS and not settings.SMTP_SSL:
             server.starttls()
 
         if settings.SMTP_USER and settings.SMTP_PASSWORD:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-
         server.sendmail(
             settings.EMAILS_FROM_EMAIL,
             [email_to],

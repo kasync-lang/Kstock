@@ -27,4 +27,4 @@ async def seed2():
     user_test = await User.find_one(User.id == ObjectId("68c174d38f980502a4016963"))
     print(user_test)
 if __name__ == "__main__":
-    asyncio.run(seed2())
+    asyncio.run(seed())
