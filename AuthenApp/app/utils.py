@@ -100,7 +100,7 @@ def generate_reset_password_email(email_to:str, email:str, token:str) -> EmailDa
 def generate_signup_verify_email( email:str, token:str) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - Signup verification for user {email}"
-    verify_link = f"{settings.FRONTEND_HOST}/signup-verify?token={token}"
+    verify_link = f"{settings.FRONTEND_HOST}{settings.PREFIX_API}/signup-verify?token={token}"
     html_content = render_email_template(
         template_name="verify_email.html",
         context={

@@ -59,6 +59,7 @@ class Setting(BaseSettings):
     PROJECT_NAME: str | None = None
     FRONTEND_HOST: str
     MONGO_URI:str
+    PREFIX_API:str = "/api/v1"
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:
         if not self.EMAILS_FROM_NAME:

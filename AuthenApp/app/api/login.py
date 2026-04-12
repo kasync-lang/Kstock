@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -65,11 +66,19 @@ async def signup_verify(token:str):
     if not email:
         raise HTTPException(status_code=400, detail="Invalid token")
     user = await crud.get_user_by_email(email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     if user.is_verified:
-        raise HTTPException(status_code=400, detail="Token expired")
-    User.find_one(email=email).update({"is_verified": True})
-    await user.save(ignore_revision=True)
-    return Message(message="User verified successfully")
+        raise HTTPException(status_code=400, detail="User already verified")
+
+    try:
+        user.is_verified=True
+        user.is_actived=True
+        await user.save(ignore_revision=False)
+        return Message(message="User verified successfully")
+    except Exception as e:
+        logging.log(logging.WARN, f"Error verifying user: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/login/test-token", response_model= UserPublic)

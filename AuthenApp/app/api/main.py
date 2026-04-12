@@ -1,11 +1,11 @@
 from fastapi import APIRouter
-
+from app.core.config import settings
 from app.api import login
 from app.api import testutil
 from app.api import user
 from app.api import jwk
 
-api_router = APIRouter(prefix="/api/v1")
+api_router = APIRouter(prefix=settings.PREFIX_API)
 
 api_router.include_router(login.router)
 api_router.include_router(testutil.router)
