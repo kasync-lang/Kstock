@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echi "Checking for required environment variables..."
+echo "Checking for required environment variables..."
 # ====== Required environment variables ======
 REQUIRED_ENVS=(
   "SECRET_KEY_HUB"
-  "KAFKA_BOOTSTRAP_SERVERS"
-  "KAFKA_TOPIC_NEWS_RAW"
+  # Default sink in `main.py` is S3, so require bucket.
+  "S3_BUCKET"
  )
 MISSING_ENVS=false
 for var in "${REQUIRED_ENVS[@]}"; do
@@ -19,5 +19,4 @@ if [ "$MISSING_ENVS" = true ]; then
   exit 1
 fi
 echo "All required environment variables are set."
-# ====== Start the application ======
-echo "Starting the application with $WORKER_COUNT workers..."
+exec "$@"

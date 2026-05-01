@@ -1,0 +1,15 @@
+services:
+  news-ingestor:
+    build: .
+    container_name: news-ingestor
+    restart: always
+    environment:
+      - SECRET_KEY_HUB=d3d027pr01qmnfgfhi7gd3d027pr01qmnfgfhi80,d55rsupr01qu4ccinqd0d55rsupr01qu4ccinqdg,d4pgar9r01qjpnav3o0gd4pgar9r01qjpnav3o10
+      # S3/R2/MinIO settings (fill these in for your environment)
+      - S3_BUCKET=kstock-bucket-dev
+      # - S3_PREFIX=news
+      # - S3_ENDPOINT_URL=http://minio:9000
+      # - S3_FORCE_PATH_STYLE=true
+      # - S3_REGION=us-east-1
+      # - AWS_ACCESS_KEY_ID=minioadmin
+      # - AWS_SECRET_ACCESS_KEY=minioadmin

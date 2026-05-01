@@ -4,7 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "requests>=2.33.1",
-    "confluent-kafka>=2.12.2",
     "python-dotenv>=1.2.1",
     "finnhub-python>=2.4.27",
+    "boto3>=1.43.1",
+    "boto3-stubs~=1.43.1",
 ]
