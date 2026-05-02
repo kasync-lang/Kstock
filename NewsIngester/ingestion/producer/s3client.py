@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -70,7 +71,7 @@ class S3Config:
 
 		load_dotenv(override=False)
 
-		bucket = (os.getenv("BUCKET_URL") or "").strip()
+		bucket = (os.getenv("S3_BUCKET") or "").strip()
 		if require_bucket and not bucket:
 			raise ValueError("Missing required env var: S3_BUCKET")
 
@@ -169,12 +170,18 @@ class S3NewsUploader:
 		key = f"news_raw/source={source}/symbol={symbol}/date={date_part}/{news_id}.json"
 		p = self._base_prefix()
 		return f"{p}/{key}" if p else key
+	def build_news_list_keys(self, news_list: Iterable[NewsRaw]) -> str:
+		news=list(news_list)[0]
+		source = _clean_segment(news.source)
+		symbol = _clean_segment(news.symbol)
+		date_part = news.published_at.date().isoformat()
+		key = f"news_raw/source={source}/symbol={symbol}/date={date_part}.json"
+		p = self._base_prefix()
+		return f"{p}/{key}" if p else key
 
 	def ensure_bucket_exists(self, *, create_if_missing: bool = False) -> None:
-		"""Optionally ensure the configured bucket exists.
+		"""ensure the configured bucket exists.
 
-		On AWS, creating buckets is region-sensitive. For many S3-compatible
-		providers (MinIO/R2), `create_bucket` may behave differently.
 		"""
 
 		try:
@@ -188,7 +195,7 @@ class S3NewsUploader:
 				raise
 
 		kwargs: dict[str, Any] = {"Bucket": self.config.bucket}
-		if self.config.region and self.config.region != "us-east-1":
+		if self.config.region and self.config.region != "apac":
 			kwargs["CreateBucketConfiguration"] = {"LocationConstraint": self.config.region}
 		self._client.create_bucket(**kwargs)
 
@@ -227,4 +234,26 @@ class S3NewsUploader:
 			except Exception:
 				logger.exception("Failed to upload news id=%s symbol=%s", getattr(it, "id", ""), getattr(it, "symbol", ""))
 		return n
+	def upload_list(self, items: Iterable[NewsRaw],*, key: str | None = None) -> str | None:
+		list_items = list(items)
+		if not list_items:
+			return
+		news0 = list(items)[0]
+		list_objects_key =key or self.build_news_list_keys(items)
+		metadata = {
+			"source": str(news0.source),
+			"symbol": str(news0.symbol),
+			"published_at": news0.published_at.astimezone(timezone.utc).isoformat()
+			if news0.published_at.tzinfo
+			else news0.published_at.replace(tzinfo=timezone.utc).isoformat(),
+		}
+		list_news = [item.to_dict() for item in items]
+		self._client.put_object(
+			Bucket=self.config.bucket,
+			Key=list_objects_key,
+			Body=json.dumps(list_news).encode("utf-8"),
+			ContentType="application/json",
+			Metadata=metadata,
+		)
+		return list_objects_key
 
