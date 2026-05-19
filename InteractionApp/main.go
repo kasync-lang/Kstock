@@ -21,12 +21,11 @@ import (
 
 func main() {
 	// Init: load env/config, jwt keystore, db ...
-	server.StartServer()
 
 	// Cancel both Kafka listener and HTTP server on Ctrl+C (SIGINT) or Docker stop (SIGTERM).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
+	server.StartServer(ctx)
 	cfgKafka := server.NewKafkaListenerConfigFromConfig(config.Cfg)
 	priceStore := dto.NewPriceStore()
 	// Add usd

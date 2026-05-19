@@ -1,10 +1,11 @@
-package main
+package eventbus
 
 import (
 	"context"
 	"log"
 	"net/http"
 	"sync"
+	"ws/stream/stock/kafkaclient"
 
 	"github.com/gorilla/websocket"
 )
@@ -29,7 +30,7 @@ type Manager struct {
 }
 
 // go
-func NewManager(ctx context.Context, cfg *Config) *Manager {
+func NewManager(ctx context.Context, cfg *kafkaclient.Config) *Manager {
 	m := &Manager{
 		clients:  make(map[*Client]bool),
 		handlers: make(map[string]EventHandler),
@@ -37,7 +38,7 @@ func NewManager(ctx context.Context, cfg *Config) *Manager {
 	m.SetupEventHandlers()
 	eventBus := NewEventBus(1000)
 
-	go GetData(ctx, eventBus, cfg)
+	go kafkaclient.GetData(ctx, eventBus, cfg)
 
 	go func() {
 		eventCh := eventBus.subscribe()
@@ -55,6 +56,7 @@ func NewManager(ctx context.Context, cfg *Config) *Manager {
 
 func (m *Manager) SetupEventHandlers() {
 	m.handlers[EventSubscribe] = handleSubscribe
+	m.handlers[EventUnsubscribe] = handleUnsubscribe
 }
 func checkOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
@@ -132,7 +134,7 @@ func (m *Manager) addClient(c *Client) {
 	defer m.Unlock()
 	m.clients[c] = true
 }
-func (m *Manager) serveWS(w http.ResponseWriter, r *http.Request) {
+func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	log.Println("Serving WebSocket connection")
 	conn, err := websocketUpgrader.Upgrade(w, r, nil)
 	if err != nil {

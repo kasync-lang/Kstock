@@ -18,4 +18,5 @@ func RegisterAllRoutes(routes *gin.Engine) {
 	RegisterAlertRoutes(main_route)
 	RegisterAssetRoutes(main_route)
 	RegisterTransactionHandle(main_route)
+	RegisterSocketRoute(main_route)
 }

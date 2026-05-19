@@ -2,6 +2,7 @@ package server
 
 import (
 	"Kstock/internal/dto"
+	"Kstock/internal/ksocket"
 	"context"
 	"encoding/json"
 
@@ -22,6 +23,10 @@ func NewPriceHandler(store PriceUpdater) KafkaMessageHandler {
 		}
 		price := valueData.P
 		store.Update(symbol, price)
+		GetEventBus().Publish(ksocket.Event{
+			Key:  symbol,
+			Data: msg.Value,
+		})
 		return nil
 	}
 }

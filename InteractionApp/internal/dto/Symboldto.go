@@ -20,7 +20,7 @@ type SymbolPublic struct {
 	Logo   string `json:"logo" db:"logo"`
 }
 type QuerySymbol struct {
-	Name    string `form:"name" binding:"required"`
+	Name    string `form:"name" binding:"omitempty" default:""`
 	Exhange string `form:"exchange" binding:"omitempty" default:"NASDAQ"`
 	OrderBy string `form:"order_by" binding:"omitempty" oneof:"name,market_cap,ipo" default:"name"`
 }

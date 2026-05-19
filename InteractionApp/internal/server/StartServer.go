@@ -2,13 +2,21 @@ package server
 
 import (
 	"Kstock/internal/config"
+	"Kstock/internal/ksocket"
 	"Kstock/pkg/jwk"
+	"context"
+	"errors"
 	"log"
 
 	"github.com/joho/godotenv"
 )
 
-func StartServer() {
+var (
+	eventBus *ksocket.EventBus
+	manager  *ksocket.Manager
+)
+
+func StartServer(ctx context.Context) {
 
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -34,4 +42,23 @@ func StartServer() {
 	} else {
 		log.Printf("Init DB success %v", instance)
 	}
+	if InitSocket(ctx) != nil {
+		log.Fatal("Init Socket error")
+	} else {
+		log.Printf("Init Socket success")
+	}
+}
+func InitSocket(ctx context.Context) error {
+	eventBus = ksocket.NewEventBus(1000)
+	manager = ksocket.NewManager(ctx, eventBus)
+	if eventBus == nil || manager == nil {
+		return errors.New("Event Bus Error")
+	}
+	return nil
+}
+func GetEventBus() *ksocket.EventBus {
+	return eventBus
+}
+func GetManager() *ksocket.Manager {
+	return manager
 }

@@ -1,4 +1,4 @@
-package main
+package eventbus
 
 type Event struct {
 	Key  string `json:"type"`
@@ -45,5 +45,10 @@ const (
 func handleSubscribe(event Subscription, c *Client) error {
 	var symbol = event.Symbol
 	c.subs[symbol] = true
+	return nil
+}
+func handleUnsubscribe(event Subscription, c *Client) error {
+	var symbol = event.Symbol
+	c.subs[symbol] = false
 	return nil
 }

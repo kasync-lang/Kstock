@@ -1,16 +1,18 @@
-package main
+package kafkaclient
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/segmentio/kafka-go"
 	"log"
 	"time"
+	"ws/stream/stock/eventbus"
+
+	"github.com/segmentio/kafka-go"
 )
 
 // go
-func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
+func GetData(ctx context.Context, bus *eventbus.EventBus, cfg *Config) {
 	broker := []string{fmt.Sprintf("%s:%d", cfg.KAFKAHost, cfg.KAFKAPort)}
 
 	r := kafka.NewReader(kafka.ReaderConfig{
@@ -30,8 +32,7 @@ func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
 	for {
 		m, err := r.ReadMessage(ctx)
 		if err != nil {
-
-			// 1. Context bị cancel → shutdown 
+			// 1. Context bị cancel → shutdown
 			if errors.Is(err, context.Canceled) ||
 				errors.Is(err, context.DeadlineExceeded) {
 				log.Println("kafka reader stopped by context")
@@ -52,7 +53,7 @@ func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
 
 		// reset backoff khi đọc thành công
 		backoff = time.Second
-		bus.Publish(Event{
+		bus.Publish(eventbus.Event{
 			Key:  string(m.Key),
 			Data: m.Value,
 		})

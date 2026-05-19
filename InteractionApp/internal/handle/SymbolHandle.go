@@ -4,18 +4,17 @@ import (
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 func GetSymbols(c *gin.Context) {
 	// Implementation for getting symbols
 	var query_symbol dto.QuerySymbol
 	db := server.GetDB()
-	log.Println(db)
-
 	if err := c.ShouldBindQuery(&query_symbol); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid query parameters"})
 		return
@@ -29,7 +28,6 @@ func GetSymbols(c *gin.Context) {
 	if !ok {
 		orderBy = "ticker"
 	}
-	log.Printf("query_symbol: %v", query_symbol)
 	query := fmt.Sprintf(`
 SELECT name, ticker, logo
 FROM company_profile
@@ -50,10 +48,8 @@ ORDER BY %s
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Println(symbol)
 		data = append(data, symbol)
 	}
-	log.Println(data)
 	c.JSON(200, gin.H{"data": data})
 }
 func GetSymbolDetail(c *gin.Context) {
