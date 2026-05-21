@@ -7,7 +7,7 @@ from typing_extensions import Self
 import warnings
 
 
-KEY_DIR = os.getenv("PRIVATE_KEY_PATH")
+KEY_DIR = os.environ["PRIVATE_KEY_PATH"]
 class KeyStore:
     private_key = None
     public_key = None
@@ -56,7 +56,7 @@ class Setting(BaseSettings):
     SMTP_PASSWORD: str | None = None
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: EmailStr | None = None
-    PROJECT_NAME: str | None = None
+    PROJECT_NAME: str | None = "Kstock Authentication"
     FRONTEND_HOST: str
     MONGO_URI:str
     PREFIX_API:str = "/api/v1"

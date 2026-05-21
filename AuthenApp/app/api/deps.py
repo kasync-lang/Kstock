@@ -1,7 +1,6 @@
 import logging
 from typing import Annotated
 import jwt
-from cryptography.hazmat.primitives import serialization
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -19,7 +18,7 @@ from app.schema.user import UserBase
 from app.core.config import settings
 import logging
 reuseable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl="/login/access-token",
+    tokenUrl=f"{settings.PREFIX_API}/login/access-token",
 )
 TokenDep = Annotated[str, Depends(reuseable_oauth2)]
 

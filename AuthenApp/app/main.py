@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from app.core.db import init_db
 from fastapi.templating import Jinja2Templates
 from app.api.main import api_router
-import logging
 
 
 # @asynccontextmanager

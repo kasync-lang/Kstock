@@ -6,6 +6,7 @@ from app.core import crud
 from app.api.deps import get_current_active_superuser, CurrentUser
 from fastapi import BackgroundTasks
 from app.core.config import settings
+from app.core.crud import get_user_by_email
 from app.core.security import get_password_hash, verify_password
 from app.utils import generate_new_account_email, send_email
 from app.schema.user import UsersPublic, UserCreate, Message, UserPublic
@@ -64,10 +65,20 @@ async def update_user_password_me(body: UpdatePassword, current_user: CurrentUse
 def read_user_me(current_user: CurrentUser) -> Any:
     return current_user
 @router.delete("/me", response_model=Message)
-def delete_user_me(current_user: CurrentUser) -> Any:
+async def delete_user_me(current_user: CurrentUser) -> Any:
     if current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser can not be deleted yourself")
-    User.find_one(User.id == current_user.id).delete()
+    try:
+        user_to_delete = await get_user_by_email(email=current_user.email)
+        if user_to_delete:
+            user_to_delete.is_actived=False
+            await user_to_delete.save()
+        else:
+            raise HTTPException(status_code=404, detail="User not found in system")
+    except Exception as e:
+        logging.error(e)
+        raise HTTPException(status_code=400, detail="Something went wrong")
+
     return Message(message="User deleted successfully")
 
 @router.get("/{user_id}", response_model=UserPublic)
@@ -99,7 +110,9 @@ async def delete_user(user_id: str, current_user: CurrentUser) -> Message:
     if user.id == ObjectId(current_user.id):
         raise HTTPException(status_code=403, detail="Can not delete superuser yourself")
     if user:
-        await User.find_one(User.id == ObjectId(user_id)).delete()
+        user.is_actived = False
+    else:
+        raise HTTPException(status_code=404, detail="User not found in system")
     return Message(message="User deleted successfully")
 
 
