@@ -21,7 +21,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: http.HandlerFunc(m.serveWS),
+		Handler: http.HandlerFunc(m.ServeWS),
 	}
 
 	go func() {

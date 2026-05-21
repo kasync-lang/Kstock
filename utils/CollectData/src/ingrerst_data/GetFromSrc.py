@@ -93,7 +93,7 @@ def send_data_with_retry(producer:Producer, topic,key, value, max_retries=5):
 
 async def main():
     logging.warning("Starting main function")
-    dotenv.load_dotenv(os.getenv("ENV_PATH"))
+    dotenv.load_dotenv(os.getenv("ENV_PATH"), override=False)
     logging.warning(f"ENV_PATH: {type(os.getenv('ENV_PATH'))}")
     logging.warning(f"ENV_PATH value: {os.environ}")
     list_symbol = []

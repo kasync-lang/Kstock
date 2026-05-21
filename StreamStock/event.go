@@ -1,4 +1,4 @@
-package eventbus
+package main
 
 type Event struct {
 	Key  string `json:"type"`

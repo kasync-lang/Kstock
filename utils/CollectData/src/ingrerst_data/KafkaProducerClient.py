@@ -9,14 +9,32 @@ class KafkaProducerSingleton:
         config = {
             'bootstrap.servers': bootstrap_servers,
             'client.id': socket.gethostname(),
-            "queue.buffering.max.kbytes": 20480,   # buffer 20MB
-            "queue.buffering.max.messages": 200000,
-            "linger.ms": 5,                        # gom batch nhỏ
-            "compression.type": "lz4",
-            "socket.keepalive.enable": True,
-            "message.timeout.ms": 10000,           # 10s
-            "enable.idempotence": False,
-        }
+
+            # disable batching
+            'linger.ms': 0,
+
+            # disable compression
+            'compression.type': 'none',
+
+            # reduce internal queue
+            'queue.buffering.max.messages': 1000,
+            'queue.buffering.max.kbytes': 1024,
+
+            # send immediately
+            'batch.num.messages': 1,
+
+            # network
+            'socket.keepalive.enable': True,
+
+            # delivery timeout
+            'message.timeout.ms': 3000,
+
+            # optional
+            'acks': 1,
+
+            # optional
+            'enable.idempotence': False,
+}
         self.producer = Producer(config)
     @classmethod
     def get_instance(cls, bootstrap_servers="192.168.2.100:29092"):

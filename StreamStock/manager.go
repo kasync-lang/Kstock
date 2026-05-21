@@ -1,11 +1,10 @@
-package eventbus
+package main
 
 import (
 	"context"
 	"log"
 	"net/http"
 	"sync"
-	"ws/stream/stock/kafkaclient"
 
 	"github.com/gorilla/websocket"
 )
@@ -30,7 +29,7 @@ type Manager struct {
 }
 
 // go
-func NewManager(ctx context.Context, cfg *kafkaclient.Config) *Manager {
+func NewManager(ctx context.Context, cfg *Config) *Manager {
 	m := &Manager{
 		clients:  make(map[*Client]bool),
 		handlers: make(map[string]EventHandler),
@@ -38,7 +37,7 @@ func NewManager(ctx context.Context, cfg *kafkaclient.Config) *Manager {
 	m.SetupEventHandlers()
 	eventBus := NewEventBus(1000)
 
-	go kafkaclient.GetData(ctx, eventBus, cfg)
+	go GetData(ctx, eventBus, cfg)
 
 	go func() {
 		eventCh := eventBus.subscribe()

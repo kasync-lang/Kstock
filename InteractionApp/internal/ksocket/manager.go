@@ -13,7 +13,7 @@ var (
 	websocketUpgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		//CheckOrigin:     checkOrigin,
+		CheckOrigin:     checkOrigin,
 	}
 )
 
@@ -55,8 +55,11 @@ func (m *Manager) SetupEventHandlers() {
 }
 func checkOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
 	switch origin {
-	case "http://localhost:3000", "http://":
+	case "localhost", "https://kasyntech.com":
 		return true
 	default:
 		return false
