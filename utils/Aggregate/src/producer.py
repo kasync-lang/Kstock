@@ -28,8 +28,9 @@ class ProducerKafkaConfig:
         }
         config.update(self.extra_config)
         return config
+
     @staticmethod
-    def from_env():
+    def from_env() -> "ProducerKafkaConfig":
         return ProducerKafkaConfig(
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
             topic=os.getenv("KAFKA_TOPIC", "ohlcv-topic"),
@@ -50,16 +51,24 @@ class ProducerClient:
         headers: Optional[list[tuple[str, str]]] = None,
         on_delivery: Optional[Callable[[Any, Any], None]] = None,
     ) -> None:
-        target_topic = topic or self.config.topic
+        target_topic = self.config.topic if topic is None else topic
         payload = value.encode("utf-8") if isinstance(value, str) else value
-        encoded_key = key.encode("utf-8") if isinstance(key, str) else key
-        self._producer.produce(
-            topic=target_topic,
-            value=payload,
-            key=encoded_key,
-            headers=headers,
-            callback=on_delivery,
-        )
+        if key is None:
+            self._producer.produce(
+                topic=target_topic,
+                value=payload,
+                headers=headers,
+                callback=on_delivery,
+            )
+        else:
+            encoded_key = key.encode("utf-8") if isinstance(key, str) else key
+            self._producer.produce(
+                topic=target_topic,
+                value=payload,
+                key=encoded_key,
+                headers=headers,
+                callback=on_delivery,
+            )
         self._producer.poll(0)
 
     def produce_tick(
@@ -68,7 +77,6 @@ class ProducerClient:
         topic: Optional[str] = None,
         on_delivery: Optional[Callable[[Any, Any], None]] = None,
     ) -> None:
-        from tickModel import TickModel
 
         if not isinstance(tick, TickModel):
             raise TypeError("tick must be a TickModel instance")
@@ -79,8 +87,8 @@ class ProducerClient:
             on_delivery=on_delivery,
         )
 
-    def flush(self, timeout: float | None = None) -> int:
-        return self._producer.flush(timeout)
+    def flush(self) -> int:
+        return self._producer.flush(0)
 
     def close(self) -> None:
         self.flush()
