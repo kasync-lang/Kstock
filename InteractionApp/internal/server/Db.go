@@ -3,9 +3,10 @@ package server
 import (
 	"Kstock/internal/config"
 	"fmt"
+	"sync"
+
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"sync"
 )
 
 var (
@@ -30,4 +31,14 @@ func IntiDB() (*sqlx.DB, error) {
 }
 func GetDB() *sqlx.DB {
 	return instance
+}
+
+// SetDBForTest allows tests to inject a mock DB instance.
+func SetDBForTest(db *sqlx.DB) {
+	instance = db
+}
+
+// ResetDBForTest clears the global DB instance after tests.
+func ResetDBForTest() {
+	instance = nil
 }

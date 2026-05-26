@@ -42,6 +42,12 @@ func StartServer(ctx context.Context) {
 	} else {
 		log.Printf("Init DB success %v", instance)
 	}
+	chConn, chErr := InitClickHouse()
+	if chErr != nil {
+		log.Fatal("Init ClickHouse error", chErr)
+	} else {
+		log.Printf("Init ClickHouse success %v", chConn != nil)
+	}
 	if InitSocket(ctx) != nil {
 		log.Fatal("Init Socket error")
 	} else {
