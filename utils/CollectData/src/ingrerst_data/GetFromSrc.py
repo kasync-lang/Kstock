@@ -4,6 +4,7 @@ from ingrerst_data.KafkaProducerClient import KafkaProducerSingleton
 import random
 import os
 import websockets
+import random
 import time
 import traceback
 import dotenv
@@ -35,13 +36,12 @@ async def connect_ws(list_symbol:list[str], ws_url:str, socket_order = 1):
 
                 while True:
                     try:
-                        msg = await asyncio.wait_for(ws.recv(), timeout=10)
+                        msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         await handle_message(msg)
                     except asyncio.TimeoutError:
-                        print("No message received in 10 seconds, sending ping...")
                         await ws.ping()
                     except websockets.exceptions.ConnectionClosed:
-                        print("Connection closed, reconnecting...")
+                        logging.warning("Connection closed, reconnecting...")
                         break
         except Exception as e:
             print("WebSocket crashed:", e)
@@ -59,7 +59,7 @@ async def handle_message(msg):
 
         await queue.put(msg)
     except Exception as e:
-        print("Error processing message:", e)
+        logging.warning("Error processing message:", e)
         traceback.print_exc()
 
 async def worker():
@@ -69,11 +69,10 @@ async def worker():
         #main work here
         msg = json.loads(msg)
         if msg["type"] == "ping":
-            print("Worker: received ping")
             continue
         for record in msg["data"]:
             symbol = record["s"]
-            send_data_with_retry(producer,topic="raw_data_trade", key=symbol, value=json.dumps(record))
+            send_data_with_retry(producer,topic=os.environ["KAFKA_TOPIC"], key=symbol, value=json.dumps(record))
 
 
 
@@ -101,15 +100,17 @@ async def main():
     logging.warning(f"WS_URL1: {ws_url1}")
     ws_url2 = os.getenv("WS_URL2")
     ws_url3 = os.getenv("WS_URL3")
-    with open("list_symbol.txt", "r") as f:
+    ws_url4 = os.getenv("WS_URL4")
+    with open("../list_symbol.txt", "r") as f:
         for line in f:
             ticker = line.strip()
             list_symbol.append(ticker)
-            
+    random.shuffle(list_symbol)
     await asyncio.gather(
-        connect_ws(list_symbol[:49], ws_url1,1),
-        connect_ws(list_symbol[49:100], ws_url2,2),
-        connect_ws(list_symbol[100:-1], ws_url3,3),
+        connect_ws(list_symbol[:40], ws_url1,1),
+        connect_ws(list_symbol[40:80], ws_url2,2),
+        connect_ws(list_symbol[80:120], ws_url3,3),
+        connect_ws(list_symbol[120:-1], ws_url4, 4),
         worker()
     )
 if __name__ == '__main__':

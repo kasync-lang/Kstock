@@ -44,20 +44,6 @@ class S3Config:
 
 	@staticmethod
 	def from_env(*, require_bucket: bool = True) -> "S3Config":
-		"""Read S3 configuration from environment variables.
-
-		Required:
-		  - S3_BUCKET
-
-		Optional:
-		  - S3_PREFIX
-		  - S3_ENDPOINT_URL (for MinIO / Cloudflare R2 / LocalStack)
-		  - S3_REGION / AWS_REGION / AWS_DEFAULT_REGION
-		  - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN
-		  - S3_FORCE_PATH_STYLE=true (often required for MinIO)
-		  - S3_VERIFY_SSL=false (or path to CA bundle)
-		"""
-
 		load_dotenv(override=False)
 
 		bucket = (os.getenv("S3_BUCKET") or "").strip()
