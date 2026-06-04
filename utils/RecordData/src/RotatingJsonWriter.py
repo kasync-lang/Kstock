@@ -3,7 +3,7 @@ import json
 import time
 import datetime
 from datetime import timezone
-
+from zoneinfo import ZoneInfo
 class RotatingJSONLWriter:
     def __init__(self, base_dir, symbol, max_size_mb=50):
         self.base_dir = base_dir
@@ -18,7 +18,7 @@ class RotatingJSONLWriter:
         self._open_new_file()
 
     def _get_today_dir(self):
-        today = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.datetime.now().astimezone(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
         path = os.path.join(self.base_dir, self.symbol, today)
         os.makedirs(path, exist_ok=True)
         return path
