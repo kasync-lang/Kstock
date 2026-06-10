@@ -1,6 +1,6 @@
 import asyncio
 import json
-from ingrerst_data.KafkaProducerClient import KafkaProducerSingleton
+from src.ingrerst_data.KafkaProducerClient import KafkaProducerSingleton
 import random
 import os
 import websockets
@@ -93,15 +93,12 @@ def send_data_with_retry(producer:Producer, topic,key, value, max_retries=5):
 async def main():
     logging.warning("Starting main function")
     dotenv.load_dotenv(os.getenv("ENV_PATH"), override=False)
-    logging.warning(f"ENV_PATH: {type(os.getenv('ENV_PATH'))}")
-    logging.warning(f"ENV_PATH value: {os.environ}")
     list_symbol = []
     ws_url1 = os.getenv("WS_URL1")
-    logging.warning(f"WS_URL1: {ws_url1}")
     ws_url2 = os.getenv("WS_URL2")
     ws_url3 = os.getenv("WS_URL3")
     ws_url4 = os.getenv("WS_URL4")
-    with open("../list_symbol.txt", "r") as f:
+    with open("./list_symbol.txt", "r") as f:
         for line in f:
             ticker = line.strip()
             list_symbol.append(ticker)
