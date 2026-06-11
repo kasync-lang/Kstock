@@ -193,6 +193,38 @@
   box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15);
 }
 
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: color 0.2s ease, background 0.2s ease;
+  line-height: 0;
+}
+
+.toggle-password:hover {
+  color: var(--text-h);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .form-row {
   display: flex;
   align-items: center;
@@ -256,12 +288,34 @@
   border-radius: 12px;
   cursor: pointer;
   transition: border 0.2s ease, color 0.2s ease;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
-.secondary-button:hover {
-  border-color: rgba(59, 227, 255, 0.5);
-  color: var(--accent-2);
+.google-text {
+  font-weight: 600;
 }
+
+.google-text .blue {
+  color: #4285f4;
+}
+
+.google-text .red {
+  color: #ea4335;
+}
+
+.google-text .yellow {
+  color: #fbbc05;
+}
+
+.google-text .green {
+  color: #34a853;
+}
+
+
 
 .divider {
   position: relative;
