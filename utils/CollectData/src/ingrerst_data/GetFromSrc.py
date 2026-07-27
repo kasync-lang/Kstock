@@ -4,112 +4,237 @@ from src.ingrerst_data.KafkaProducerClient import KafkaProducerSingleton
 import random
 import os
 import websockets
-import random
-import time
-import traceback
 import dotenv
 import logging
 from confluent_kafka import Producer, KafkaException
-dotenv.load_dotenv(os.getenv("ENV_PATH"))
+from pathlib import Path
+from collections import defaultdict
+from datetime import datetime, timezone, time
+
+#monitor missing message
+
+
+
+
+# configure basic logging so warnings/exceptions are visible
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+
+# load env file if provided
+env_path = os.getenv("ENV_PATH")
+
+dotenv.load_dotenv(env_path, override=False)
+
 MAX_RETRIES = 10
 
-async def connect_ws(list_symbol:list[str], ws_url:str, socket_order = 1):
+
+async def connect_ws(list_symbol: list[str], ws_url: str | None, socket_order=1):
     retry = 0
+    if not ws_url:
+        logging.error("WebSocket url not provided for socket order %s", socket_order)
+        return
     while True:
         try:
-            print(f"Connecting to websocket server.....")
+            logging.info("Connecting to websocket server (order=%s)...", socket_order)
             async with websockets.connect(
                 ws_url,
                 ping_interval=20,
                 ping_timeout=10,
                 close_timeout=5,
-                max_queue=1000
+                max_queue=10000,
             ) as ws:
-                print(f"Connected to WebSocket: {socket_order}")
+                logging.info("Connected to WebSocket: %s", socket_order)
                 retry = 0
                 # Subscribe to symbols
                 for symbol in list_symbol:
-                    await ws.send(json.dumps({
-                        "type": "subscribe",
-                        "symbol": symbol,
-                    }))
+                    await ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
 
                 while True:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         await handle_message(msg)
                     except asyncio.TimeoutError:
-                        await ws.ping()
+                        logging.debug("WebSocket timeout, sending ping (order=%s)", socket_order)
+                        try:
+                            await ws.ping()
+                        except Exception:
+                            logging.exception("Failed to ping WebSocket (order=%s)", socket_order)
                     except websockets.exceptions.ConnectionClosed:
-                        logging.warning("Connection closed, reconnecting...")
+                        logging.warning("Connection closed, reconnecting for socket order %s...", socket_order)
                         break
-        except Exception as e:
-            print("WebSocket crashed:", e)
-            traceback.print_exc()
-            #reconnect with exponential backoff
+        except Exception:
+            logging.exception("WebSocket crashed (order=%s), reconnecting...", socket_order)
+            # reconnect with exponential backoff
             retry += 1
-            wait_time = min(2**retry, 60)
+            wait_time = min(2 ** retry, 60)
             await asyncio.sleep(wait_time)
-##############################
 
-queue = asyncio.Queue()
+
+queue: asyncio.Queue = asyncio.Queue()
+
 
 async def handle_message(msg):
     try:
-
         await queue.put(msg)
-    except Exception as e:
-        logging.warning("Error processing message:", e)
-        traceback.print_exc()
+    except Exception:
+        logging.exception("Error putting message into queue")
+        return
+
 
 async def worker():
-    producer = KafkaProducerSingleton.get_instance()
+    # get singleton instance (object) which contains .producer
+    producer_instance = KafkaProducerSingleton.get_instance()
+    producer: Producer = producer_instance.producer
+
     while True:
         msg = await queue.get()
-        #main work here
-        msg = json.loads(msg)
-        if msg["type"] == "ping":
+
+        try:
+            parsed = json.loads(msg)
+        except Exception:
+            logging.exception("Failed to parse incoming message, skipping. Raw message: %s", repr(msg))
             continue
-        for record in msg["data"]:
-            symbol = record["s"]
-            send_data_with_retry(producer,topic=os.environ["KAFKA_TOPIC"], key=symbol, value=json.dumps(record))
+
+        if parsed.get("type") == "ping":
+            continue
+
+        data = parsed.get("data")
+        if not data:
+            logging.debug("Message has no data field: %s", parsed)
+            continue
+
+        for record in data:
+            try:
+                if not isinstance(record, dict):
+                    logging.warning("Record is not a dict, skipping: %s", repr(record))
+                    continue
+                symbol = record.get("s")
+                if symbol is None:
+                    logging.warning("Record missing symbol 's' field: %s", record)
+                    continue
+
+                topic = os.environ.get("KAFKA_TOPIC")
+                # await per-record send so we can log failures per-symbol
+                await send_data_with_retry(producer, topic=topic, key=symbol, value=json.dumps(record))
+                update_last_seen(symbol)
+
+            except Exception:
+                logging.exception("Failed to send record for symbol %s", record.get("s"))
+                continue
 
 
-
-def send_data_with_retry(producer:Producer, topic,key, value, max_retries=5):
+async def send_data_with_retry(producer: Producer, topic, key, value, max_retries=5):
+    """
+    Async retry loop for producing messages. Uses producer.poll(0) to trigger delivery callbacks.
+    Uses asyncio.sleep instead of time.sleep so it doesn't block the event loop.
+    """
     retry = 0
+
+    def _delivery_report(err, msg):
+        try:
+            if err is not None:
+                logging.error("Delivery failed for key=%s: %s", msg.key(), err)
+            else:
+                logging.debug("Message delivered to %s [%s]", msg.topic(), msg.partition())
+        except Exception:
+            logging.exception("Error in delivery callback")
+
     while True:
         try:
-            producer.produce(topic, key = key, value=value)
+            if topic is None:
+                raise ValueError("Kafka topic is not set")
+
+            producer.produce(topic, key=key, value=value, callback=_delivery_report)
+            # trigger delivery callbacks
             producer.poll(0)
             return
-        except Exception as e:
-            delay = min(2**retry, 10) + random.random()
-            time.sleep(delay)
+        except BufferError:
+            # local producer queue is full, backoff and retry
+            delay = min(2 ** retry, 10) + random.random()
+            logging.warning("Producer queue full, backing off for %.2fs (retry %d)", delay, retry)
+            await asyncio.sleep(delay)
             retry += 1
-            if retry > max_retries:
-                raise KafkaException("Max retries exceeded for sending data to Kafka")
+        except Exception:
+            logging.exception("Error producing message, retrying (attempt %d)", retry)
+            delay = min(2 ** retry, 10) + random.random()
+            await asyncio.sleep(delay)
+            retry += 1
+
+        if retry > max_retries:
+            logging.error("Max retries exceeded for sending data to Kafka. topic=%s key=%s", topic, key)
+            raise KafkaException("Max retries exceeded for sending data to Kafka")
+
 
 async def main():
     logging.warning("Starting main function")
-    dotenv.load_dotenv(os.getenv("ENV_PATH"), override=False)
+
+    # Try to locate symbol list relative to this file or CWD
+    base = Path(__file__).resolve().parent
+    candidates = [
+        os.environ.get("LIST_SYMBOL_PATH"),
+        base / "list_symbol.txt",
+        Path.cwd() / "list_symbol.txt",
+        base.parent / "list_symbol.txt",
+    ]
+
     list_symbol = []
-    ws_url1 = os.getenv("WS_URL1")
-    ws_url2 = os.getenv("WS_URL2")
-    ws_url3 = os.getenv("WS_URL3")
-    ws_url4 = os.getenv("WS_URL4")
-    with open("./list_symbol.txt", "r") as f:
-        for line in f:
-            ticker = line.strip()
-            list_symbol.append(ticker)
-    random.shuffle(list_symbol)
+    found = False
+    for c in candidates:
+        if not c:
+            continue
+        p = Path(c)
+        if p.exists():
+            with p.open("r") as f:
+                for line in f:
+                    ticker = line.strip()
+                    if ticker:
+                        list_symbol.append(ticker)
+            found = True
+            break
+
+    if not found:
+        logging.error("list_symbol.txt not found in candidates: %s", candidates)
+        raise FileNotFoundError("list_symbol.txt not found")
+
+    list_symbol.sort(key=str.lower)
+    logging.info("list_symbol: %s", list_symbol)
+
+    # ensure safe slicing
     await asyncio.gather(
-        connect_ws(list_symbol[:40], ws_url1,1),
-        connect_ws(list_symbol[40:80], ws_url2,2),
-        connect_ws(list_symbol[80:120], ws_url3,3),
-        connect_ws(list_symbol[120:-1], ws_url4, 4),
-        worker()
+        connect_ws(list_symbol[:40], os.getenv("WS_URL1"), 1),
+        connect_ws(list_symbol[40:80], os.getenv("WS_URL2"), 2),
+        connect_ws(list_symbol[80:120], os.getenv("WS_URL3"), 3),
+        connect_ws(list_symbol[120:], os.getenv("WS_URL4"), 4),
+        worker(),
+        monitor_missing_data(list_symbol)
     )
+
+last_seen = {}
+def update_last_seen(symbol):
+    last_seen[symbol] = datetime.now(timezone.utc)
+async def monitor_missing_data(list_symbol):
+    while True:
+        now = datetime.now(timezone.utc)
+
+        missing = []
+
+        for symbol in list_symbol:
+            ts = last_seen.get(symbol)
+
+            if ts is None:
+                missing.append(symbol)
+            elif (now - ts).total_seconds() > 300:
+                logging.warning((now - ts).total_seconds())
+                missing.append(symbol)
+
+        if missing:
+            logging.warning(
+                "Missing data symbols (%d): %s",
+                len(missing),
+                ",".join(sorted(missing))
+            )
+
+        await asyncio.sleep(300)
+
 if __name__ == '__main__':
 
     asyncio.run(main())

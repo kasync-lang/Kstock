@@ -19,6 +19,19 @@ import (
 type historyResponse dto.HistoryResponse
 type CandleResponse dto.Candle
 
+// GetHistoryChart godoc
+// @Summary Get historical chart candles
+// @Description Returns OHLCV arrays for the requested symbol and time range.
+// @Tags history
+// @Produce json
+// @Param symbol query string true "Stock ticker symbol"
+// @Param from query int64 true "Unix timestamp for start time"
+// @Param to query int64 false "Unix timestamp for end time (defaults to now)"
+// @Param resolution query string false "Candle resolution (e.g. 1m, 5m, 1h, 1D). Defaults to 1D"
+// @Success 200 {object} dto.HistoryResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /chart/history [get]
 func GetHistoryChart(c *gin.Context) {
 	resolution := c.DefaultQuery("resolution", "1D")
 	symbol := c.Query("symbol")
