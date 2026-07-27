@@ -86,7 +86,7 @@ func GetHistoryChart(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	resp := historyResponse{S: "ok"}
+	resp := historyResponse{S: symbol}
 	for rows.Next() {
 		var candle CandleResponse
 		if err := rows.Scan(&candle.Symbol, &candle.Timestamp, &candle.Open, &candle.High, &candle.Low, &candle.Close, &candle.Volume); err != nil {
