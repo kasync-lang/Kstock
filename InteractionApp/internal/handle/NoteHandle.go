@@ -130,3 +130,39 @@ func DeleteNote(c *gin.Context) {
 	c.JSON(200, gin.H{"data": true})
 
 }
+
+
+
+
+///==============================package handle
+//
+//import (
+//	"time"
+//
+//	"github.com/gin-gonic/gin"
+//	"github.com/golang-jwt/jwt/v5"
+//)
+//
+//func GetChartHistory(c *gin.Context) {
+//	claims, ok := c.Get("claims")
+//	_, err := claims.(jwt.MapClaims).GetSubject()
+//	if !ok || err != nil {
+//		c.JSON(401, gin.H{"error": "Unauthorized"})
+//		c.Abort()
+//		return
+//	}
+//	resolution := c.DefaultQuery("resolution", "1D")
+//	symbol := c.Query("symbol")
+//	if symbol == "" {
+//		c.JSON(400, gin.H{"error": "symbol parameter is required"})
+//		c.Abort()
+//	}
+//	from := c.Query("from")
+//	//to set default to now
+//	to := c.DefaultQuery("to", time.Now().Format("2006-01-02 15:04:05"))
+//	if from == "" || to == "" {
+//		c.JSON(400, gin.H{"error": "from/to parameter is required"})
+//		c.Abort()
+//	}
+//
+//}

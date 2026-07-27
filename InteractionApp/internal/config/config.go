@@ -20,12 +20,11 @@ type Config struct {
 	ClickHouseUser     string
 	ClickHousePassword string
 	ClickHouseDatabase string
-	ClickHouseTable    string
 }
 
 func (c Config) String() string {
 	//TODO implement me
-	return "Config{APPPort:" + c.APPPort + ", Urldatabase:" + c.Urldatabase + ", Databasename:" + c.Databasename + ", Userdatabase:" + c.Userdatabase + ", Passworddatabase:" + c.Passworddatabase + ", AuthenHost:" + c.AuthenHost + ", KafkaBootrapServer:" + c.KafkaBootrapServer + ", KafkaTopic:" + c.KafkaTopic + ", KafkaGroupID:" + c.KafkaGroupID + ", ClickHouseHost:" + c.ClickHouseHost + ", ClickHousePort:" + c.ClickHousePort + ", ClickHouseUser:" + c.ClickHouseUser + ", ClickHousePassword:" + c.ClickHousePassword + ", ClickHouseDatabase:" + c.ClickHouseDatabase + ", ClickHouseTable:" + c.ClickHouseTable + "}"
+	return "Config{APPPort:" + c.APPPort + ", Urldatabase:" + c.Urldatabase + ", Databasename:" + c.Databasename + ", Userdatabase:" + c.Userdatabase + ", Passworddatabase:" + c.Passworddatabase + ", AuthenHost:" + c.AuthenHost + ", KafkaBootrapServer:" + c.KafkaBootrapServer + ", KafkaTopic:" + c.KafkaTopic + ", KafkaGroupID:" + c.KafkaGroupID + ", ClickHouseHost:" + c.ClickHouseHost + ", ClickHousePort:" + c.ClickHousePort + ", ClickHouseUser:" + c.ClickHouseUser + ", ClickHousePassword:" + c.ClickHousePassword + ", ClickHouseDatabase:" + c.ClickHouseDatabase + ", ClickHouseTable:" + "}"
 }
 
 var (
@@ -50,7 +49,6 @@ func LoadConfig() *Config {
 			ClickHouseUser:     os.Getenv("CLICKHOUSE_USER"),
 			ClickHousePassword: os.Getenv("CLICKHOUSE_PASSWORD"),
 			ClickHouseDatabase: os.Getenv("CLICKHOUSE_DATABASE"),
-			ClickHouseTable:    os.Getenv("CLICKHOUSE_TABLE"),
 		}
 	})
 	return Cfg

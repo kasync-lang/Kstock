@@ -1,0 +1,1266 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Stock Symbol Service API",
+    "version": "1.0.0",
+    "description": "OpenAPI 3.0 specification for the stock interaction service routes."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api",
+      "description": "Local development server"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "symbols",
+      "description": "Symbol search and detail endpoints"
+    },
+    {
+      "name": "favorites",
+      "description": "User favorite symbols"
+    },
+    {
+      "name": "notes",
+      "description": "User notes"
+    },
+    {
+      "name": "alerts",
+      "description": "User alerts"
+    },
+    {
+      "name": "assets",
+      "description": "Portfolio assets"
+    },
+    {
+      "name": "transactions",
+      "description": "Buy and sell operations"
+    },
+    {
+      "name": "websocket",
+      "description": "Real-time market data stream"
+    }
+  ],
+  "paths": {
+    "/symbols": {
+      "get": {
+        "tags": [
+          "symbols"
+        ],
+        "summary": "Search symbols",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            },
+            "description": "Prefix of the company name or ticker."
+          },
+          {
+            "name": "exchange",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "NASDAQ"
+            },
+            "description": "Exchange prefix filter."
+          },
+          {
+            "name": "order_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "market_cap",
+                "ipo"
+              ],
+              "default": "name"
+            },
+            "description": "Sort field."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching symbols",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/symbols/{symbol}/detail": {
+      "get": {
+        "tags": [
+          "symbols"
+        ],
+        "summary": "Get symbol detail",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stock ticker symbol."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Symbol detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/favorites": {
+      "get": {
+        "tags": [
+          "favorites"
+        ],
+        "summary": "Get favorite symbols",
+        "responses": {
+          "200": {
+            "description": "Favorite symbol list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FavoriteListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/favorites/{symbol}": {
+      "post": {
+        "tags": [
+          "favorites"
+        ],
+        "summary": "Add a symbol to favorites",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Symbol to add to the user's favorites."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Favorite added successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "favorites"
+        ],
+        "summary": "Remove a symbol from favorites",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Symbol to remove from the user's favorites."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Favorite removed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/notes": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Get all notes",
+        "responses": {
+          "200": {
+            "description": "Note list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Create a note",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Note created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Update a note",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Note updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/notes/{value}": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Get notes by symbol prefix",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Symbol prefix used to filter notes."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notes for the symbol prefix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "notes"
+        ],
+        "summary": "Delete a note",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Note ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Note deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BooleanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/alerts": {
+      "post": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Create an alert",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Alert created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/alerts/{value}": {
+      "get": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Get alerts by symbol",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Symbol used to filter the user's alerts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert details for the symbol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Delete an alert",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Alert ID."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Alert deleted successfully"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/assets": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Get user assets",
+        "responses": {
+          "200": {
+            "description": "Portfolio assets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/transactions": {
+      "post": {
+        "tags": [
+          "transactions"
+        ],
+        "summary": "Execute a buy or sell transaction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionOrder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BuyOrderResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SellOrderResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Insufficient balance or holdings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "tags": [
+          "websocket"
+        ],
+        "summary": "Open a websocket stream",
+        "description": "Upgrades the HTTP connection to a websocket.\nThe client sends JSON subscription messages such as:\n`{\"type\":\"subscribe\",\"symbol\":\"AAPL\"}`\nand the server publishes tick payloads for subscribed symbols.\n",
+        "parameters": [
+          {
+            "name": "Connection",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "Upgrade"
+              ]
+            },
+            "description": "Set to `Upgrade` for websocket handshakes."
+          },
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "websocket"
+              ]
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer JWT access token."
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          },
+          "400": {
+            "description": "Bad websocket request"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Bearer JWT required by the global auth middleware."
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "BooleanResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SymbolPublic": {
+        "type": "object",
+        "required": [
+          "ticker",
+          "name",
+          "logo"
+        ],
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string"
+          }
+        }
+      },
+      "SymbolBaseDetail": {
+        "type": "object",
+        "required": [
+          "country",
+          "currency",
+          "exchange",
+          "ipo",
+          "marketCapitalization",
+          "name",
+          "phone",
+          "shareOutstanding",
+          "ticker",
+          "weburl",
+          "logo",
+          "industry"
+        ],
+        "properties": {
+          "country": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string"
+          },
+          "ipo": {
+            "type": "string"
+          },
+          "marketCapitalization": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "shareOutstanding": {
+            "type": "number"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "weburl": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          }
+        }
+      },
+      "SymbolListResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SymbolPublic"
+            }
+          }
+        }
+      },
+      "SymbolDetailResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SymbolBaseDetail"
+          }
+        }
+      },
+      "FavoriteListResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "NoteCreateRequest": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "title"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "NoteUpdateRequest": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "NotePublic": {
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "NoteDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "content",
+          "symbol",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "NoteListResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteDetail"
+            }
+          }
+        }
+      },
+      "NoteCreateResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotePublic"
+          }
+        }
+      },
+      "NoteUpdateResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NoteUpdateRequest"
+          }
+        }
+      },
+      "AlertTrigger": {
+        "type": "object",
+        "required": [
+          "operator",
+          "indicator"
+        ],
+        "properties": {
+          "operator": {
+            "type": "string"
+          },
+          "threshold": {
+            "type": "number",
+            "nullable": true
+          },
+          "indicator": {
+            "type": "string"
+          }
+        }
+      },
+      "AlertCreateRequest": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "triggers"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertTrigger"
+            }
+          }
+        }
+      },
+      "AlertDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "symbol",
+          "status",
+          "created_at",
+          "updated_at",
+          "triggers"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "status": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "triggers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertTrigger"
+            }
+          }
+        }
+      },
+      "AlertCreateResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "AlertDetailResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AlertDetail"
+          }
+        }
+      },
+      "Asset": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "quantity",
+          "price",
+          "profit_and_loss",
+          "market_value"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "price": {
+            "type": "number"
+          },
+          "profit_and_loss": {
+            "type": "number"
+          },
+          "market_value": {
+            "type": "number"
+          }
+        }
+      },
+      "AssetsResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "all_profit_and_loss"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            }
+          },
+          "all_profit_and_loss": {
+            "type": "number"
+          }
+        }
+      },
+      "TransactionOrder": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "quantity",
+          "operation"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL"
+            ]
+          }
+        }
+      },
+      "BuyOrderResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "symbol",
+          "amount",
+          "price",
+          "total_cost",
+          "new_usd_balance",
+          "new_unit_price",
+          "total_holdings"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          },
+          "total_cost": {
+            "type": "number"
+          },
+          "new_usd_balance": {
+            "type": "number"
+          },
+          "new_unit_price": {
+            "type": "number"
+          },
+          "total_holdings": {
+            "type": "integer"
+          }
+        }
+      },
+      "SellOrderResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "symbol",
+          "amount",
+          "price",
+          "total_proceeds",
+          "new_usd_balance",
+          "remaining_holdings"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          },
+          "total_proceeds": {
+            "type": "number"
+          },
+          "new_usd_balance": {
+            "type": "number"
+          },
+          "remaining_holdings": {
+            "type": "integer"
+          }
+        }
+      },
+      "WebSocketSubscription": {
+        "type": "object",
+        "required": [
+          "type",
+          "symbol"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "subscribe",
+              "unsubscribe"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          }
+        }
+      },
+      "WebSocketTick": {
+        "type": "object",
+        "required": [
+          "p",
+          "s",
+          "t",
+          "v"
+        ],
+        "properties": {
+          "p": {
+            "type": "number"
+          },
+          "s": {
+            "type": "string"
+          },
+          "t": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "v": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      }
+    }
+  }
+}
