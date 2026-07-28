@@ -31,7 +31,7 @@ export interface TransformedItem extends CandleData {
 }
 
 export const MOCK_OHLCV_DATA: OHLCVResponse = {
-  s: 'IBM',
+  s: 'Demos',
   t: [1784505600, 1784592000, 1784678400, 1784764800],
   o: [210.07, 210.72, 207.68, 202.64],
   h: [216.2762, 214.97, 212.3417, 207.55],
@@ -207,19 +207,19 @@ export default function StockDetailPage() {
     const candlestickSeries =
       typeof (chart as any).addSeries === 'function' && CandlestickSeries
         ? (chart as any).addSeries(CandlestickSeries, {
-            upColor: '#26a69a',
-            downColor: '#ef5350',
-            borderVisible: false,
-            wickUpColor: '#26a69a',
-            wickDownColor: '#ef5350',
-          })
+          upColor: '#26a69a',
+          downColor: '#ef5350',
+          borderVisible: false,
+          wickUpColor: '#26a69a',
+          wickDownColor: '#ef5350',
+        })
         : (chart as any).addCandlestickSeries({
-            upColor: '#26a69a',
-            downColor: '#ef5350',
-            borderVisible: false,
-            wickUpColor: '#26a69a',
-            wickDownColor: '#ef5350',
-          });
+          upColor: '#26a69a',
+          downColor: '#ef5350',
+          borderVisible: false,
+          wickUpColor: '#26a69a',
+          wickDownColor: '#ef5350',
+        });
 
     candlestickSeries.priceScale().applyOptions({
       scaleMargins: {
@@ -232,19 +232,19 @@ export default function StockDetailPage() {
     const volumeSeries =
       typeof (chart as any).addSeries === 'function' && HistogramSeries
         ? (chart as any).addSeries(HistogramSeries, {
-            color: '#26a69a',
-            priceFormat: {
-              type: 'volume',
-            },
-            priceScaleId: '',
-          })
+          color: '#26a69a',
+          priceFormat: {
+            type: 'volume',
+          },
+          priceScaleId: '',
+        })
         : (chart as any).addHistogramSeries({
-            color: '#26a69a',
-            priceFormat: {
-              type: 'volume',
-            },
-            priceScaleId: '',
-          });
+          color: '#26a69a',
+          priceFormat: {
+            type: 'volume',
+          },
+          priceScaleId: '',
+        });
 
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
