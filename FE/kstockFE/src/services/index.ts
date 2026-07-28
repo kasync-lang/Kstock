@@ -31,3 +31,6 @@ export * from './transaction.service'
 
 // Live price WebSocket feed
 export * from './socket.service'
+
+// Chart history service
+export * from './chart.service'

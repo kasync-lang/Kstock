@@ -161,3 +161,26 @@ export interface SellOrderResponse {
   new_usd_balance: number
   remaining_holdings: number
 }
+
+// ─── Chart History (InteractionApp /api/chart/history) ───────────────────────
+
+export type ChartResolution = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1D' | '1W' | '1M' | string
+
+export interface ChartHistoryQueryParams {
+  symbol: string
+  resolution: ChartResolution
+  /** Unix timestamp in seconds */
+  from: number
+  /** Unix timestamp in seconds */
+  to: number
+}
+
+export interface OHLCVResponse {
+  s: string
+  t: number[]
+  o: number[]
+  h: number[]
+  l: number[]
+  c: number[]
+  v: number[]
+}

@@ -3,6 +3,7 @@ import './App.css'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import TempPage from './pages/TempPage'
+import StockDetailPage from './pages/StockDetailPage'
 
 function App() {
   return (
@@ -11,8 +12,10 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/stock/IBM" element={<StockDetailPage />} />
+        <Route path="/stock" element={<StockDetailPage />} />
         <Route path="/temp" element={<TempPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )
