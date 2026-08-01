@@ -3,15 +3,11 @@
 
   services:
    clapp:
-      image: kstock1-ingesttick:v1
-      build:
-        context: .
-        dockerfile: Dockerfile
-      environment:
-        ENV_PATH: .env
+      image: kstock1-ingesttick:v4
+      env_file:
+        - .env
       volumes:
-        - ./:/app
-
+        - .:/app
 
 
   # volumes:

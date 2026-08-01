@@ -10,9 +10,9 @@ from confluent_kafka import Producer, KafkaException
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timezone, time
-
-#monitor missing message
-
+import time
+logger = logging.getLogger(__name__)
+from src.ingrerst_data.monitor import *
 
 
 
@@ -71,7 +71,6 @@ async def connect_ws(list_symbol: list[str], ws_url: str | None, socket_order=1)
 
 queue: asyncio.Queue = asyncio.Queue()
 
-
 async def handle_message(msg):
     try:
         await queue.put(msg)
@@ -87,7 +86,6 @@ async def worker():
 
     while True:
         msg = await queue.get()
-
         try:
             parsed = json.loads(msg)
         except Exception:
@@ -115,8 +113,7 @@ async def worker():
                 topic = os.environ.get("KAFKA_TOPIC")
                 # await per-record send so we can log failures per-symbol
                 await send_data_with_retry(producer, topic=topic, key=symbol, value=json.dumps(record))
-                update_last_seen(symbol)
-
+                await on_trade_monitor(record)
             except Exception:
                 logging.exception("Failed to send record for symbol %s", record.get("s"))
                 continue
@@ -205,35 +202,10 @@ async def main():
         connect_ws(list_symbol[80:120], os.getenv("WS_URL3"), 3),
         connect_ws(list_symbol[120:], os.getenv("WS_URL4"), 4),
         worker(),
-        monitor_missing_data(list_symbol)
+        report(list_symbol)
     )
 
-last_seen = {}
-def update_last_seen(symbol):
-    last_seen[symbol] = datetime.now(timezone.utc)
-async def monitor_missing_data(list_symbol):
-    while True:
-        now = datetime.now(timezone.utc)
 
-        missing = []
-
-        for symbol in list_symbol:
-            ts = last_seen.get(symbol)
-
-            if ts is None:
-                missing.append(symbol)
-            elif (now - ts).total_seconds() > 300:
-                logging.warning((now - ts).total_seconds())
-                missing.append(symbol)
-
-        if missing:
-            logging.warning(
-                "Missing data symbols (%d): %s",
-                len(missing),
-                ",".join(sorted(missing))
-            )
-
-        await asyncio.sleep(300)
 
 if __name__ == '__main__':
 

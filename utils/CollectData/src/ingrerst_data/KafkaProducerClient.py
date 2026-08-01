@@ -1,11 +1,11 @@
 import socket
-import time
-import random
 from confluent_kafka import Producer
+
+
 class KafkaProducerSingleton:
     _instance = None
 
-    def __init__(self, bootstrap_servers = "192.168.2.100:29092"):
+    def __init__(self, bootstrap_servers="192.168.2.100:29092"):
         config = {
             'bootstrap.servers': bootstrap_servers,
             'client.id': socket.gethostname(),
@@ -34,10 +34,19 @@ class KafkaProducerSingleton:
 
             # optional
             'enable.idempotence': False,
-}
+        }
         self.producer = Producer(config)
+
     @classmethod
     def get_instance(cls, bootstrap_servers="192.168.2.100:29092"):
+        """Return the singleton instance (object). Access producer via .producer."""
         if cls._instance is None:
             cls._instance = KafkaProducerSingleton(bootstrap_servers)
-        return cls._instance.producer
+        return cls._instance
+
+    def flush(self, timeout=5):
+        try:
+            self.producer.flush(timeout)
+        except Exception:
+            # don't raise from flush; just log if caller wants to
+            raise
