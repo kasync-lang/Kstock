@@ -3,7 +3,7 @@
 
   services:
    clapp:
-      image: kstock1-ingesttick:v4
+      image: kstock1-ingesttick:v5
       env_file:
         - .env
       volumes:

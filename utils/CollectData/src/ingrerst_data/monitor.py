@@ -31,15 +31,21 @@ socket_stats = {
         "count": 0,
     },
 }
-async def is_market_open():
+async def is_market_open() -> bool:
+    url = os.getenv("MARKET_STATUS_URL")
+    if not url:
+        raise RuntimeError("MARKET_STATUS_URL is not configured")
 
-    async with aiohttp.ClientSession() as session:
-        dotenv.load_dotenv()
-        async with session.get(os.getenv("MARKET_STATUS_URL")) as resp:
-
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
             data = await resp.json()
 
-            return data["isOpen"]
+    try:
+        return bool(data["isOpen"])
+    except KeyError as exc:
+        raise ValueError("Market-status response is missing 'isOpen'") from exc
 # format message
 # {
 #      "p": 7296.89,
@@ -58,9 +64,23 @@ async def on_receive_socket(socket_id):
 async def report(list_symbol:list[int]):
     while True:
         await asyncio.sleep(300)
-        if not await is_market_open():
+        try:
+            market_open = await is_market_open()
+        except (
+                RuntimeError,
+                aiohttp.ClientError,
+                asyncio.TimeoutError,
+                ValueError,
+        ):
+            logger.exception(
+                "Cannot retrieve market status; skipping this monitoring cycle"
+            )
             continue
-        logging.info("="*80)
+
+        if not market_open:
+            logger.info("Market is closed; skipping this monitoring cycle")
+            continue
+        logger.info("="*80)
         # clear stats
         missing_symbols = []
         #time in milisecond
@@ -93,7 +113,7 @@ async def report(list_symbol:list[int]):
                 )
             s['count'] =0
         if missing_symbols:
-            logger.warning("="*10,"Missing data","="*10)
+            logger.warning("=" * 10 + " Missing data " + "=" * 10)
             for symbol, reason in missing_symbols:
                 logger.warning("%-8s %s", symbol, reason)
         else:
