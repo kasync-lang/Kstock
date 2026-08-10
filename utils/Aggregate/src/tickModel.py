@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +20,7 @@ class TickModel:
     price: float
     symbol: str
     volume: int
+    conditions: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, int | float | str]:
         return {
@@ -36,12 +38,25 @@ class TickModel:
         if not isinstance(data, Mapping):
             raise TypeError("TickModel.from_dict expects a mapping")
 
-        return cls(
-            ts=int(_first_present(data, "ts", "t", "timestamp")),
-            price=float(_first_present(data, "price", "p")),
-            symbol=str(_first_present(data, "symbol", "s", "sym")),
-            volume=int(_first_present(data, "volume", "v", "qty", "size")),
-        )
+        ts = int(_first_present(data, "ts", "t", "timestamp"))
+        price = float(_first_present(data, "price", "p"))
+        volume = int(_first_present(data, "volume", "v", "qty", "size"))
+        symbol = str(_first_present(data, "symbol", "s", "sym")).strip()
+        raw_conditions = data.get("conditions", data.get("c", ()))
+        if not isinstance(raw_conditions, (list, tuple)) or any(
+            not isinstance(condition, str) for condition in raw_conditions
+        ):
+            raise ValueError("tick conditions must be an array of strings")
+        if ts < 0:
+            raise ValueError("tick timestamp must be a non-negative Unix timestamp in milliseconds")
+        if not math.isfinite(price):
+            raise ValueError("tick price must be finite")
+        if volume < 0:
+            raise ValueError("tick volume must be non-negative")
+        if not symbol:
+            raise ValueError("tick symbol must not be empty")
+
+        return cls(ts=ts, price=price, symbol=symbol, volume=volume, conditions=tuple(raw_conditions))
 
     @classmethod
     def from_json(cls, payload: str | bytes) -> "TickModel":

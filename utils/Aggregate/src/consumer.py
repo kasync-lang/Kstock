@@ -36,7 +36,7 @@ class ConsumerKafkaConfig:
     @staticmethod
     def from_environment() -> "ConsumerKafkaConfig":
         return ConsumerKafkaConfig(
-            topic=environ.get("KAFKA_CONSUMER_TOPIC", "ohlcv-topic"),
+            topic=environ.get("KAFKA_PULL_TOPIC", "ohlcv-topic"),
             bootstrap_servers=environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
             kafka_group_id=environ.get("KAFKA_GROUP_ID", "flink-consumer"),
             auto_offset_reset=environ.get("KAFKA_AUTO_OFFSET_RESET", "latest"),

@@ -6,7 +6,7 @@ import os
 import threading
 from contextlib import suppress
 from datetime import UTC, datetime
-
+from typing import Protocol
 import clickhouse_connect
 from dotenv import load_dotenv
 
@@ -16,6 +16,12 @@ from src.consumer import ConsumerClient, ConsumerKafkaConfig
 
 logger = logging.getLogger(__name__)
 
+
+class CandleWriter(Protocol):
+    def insert(self, table: str, data: list[list[object]], column_names: list[str]) -> None: ...
+
+# This service owns only sub-day aggregation. Daily and weekly candles are
+# produced by the downstream service from the 1d data set.
 TABLES_BY_TIMEFRAME = {
     60_000: "ohlcv_1m",
     5 * 60_000: "ohlcv_5m",
@@ -24,10 +30,11 @@ TABLES_BY_TIMEFRAME = {
 }
 
 TIMEFRAMES = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000]
-FLUSH_INTERVAL_SECONDS = float(os.getenv("FLUSH_INTERVAL_SECONDS", "5"))
-KAFKA_POLL_TIMEOUT_SECONDS = float(os.getenv("KAFKA_POLL_TIMEOUT_SECONDS", "1.0"))
 
 load_dotenv()
+
+FLUSH_INTERVAL_SECONDS = float(os.getenv("FLUSH_INTERVAL_SECONDS", "5"))
+KAFKA_POLL_TIMEOUT_SECONDS = float(os.getenv("KAFKA_POLL_TIMEOUT_SECONDS", "1.0"))
 
 
 def build_aggregators() -> list[OHLCVAggregator]:
@@ -61,13 +68,13 @@ def _candle_rows(finalized: list) -> list[list[object]]:
 
 def flush_candles(
     aggs: list[OHLCVAggregator],
-    clickhouse_client: clickhouse_connect.driver.Client,
+    clickhouse_client: CandleWriter,
     *,
     drain: bool = False,
 ) -> int:
     inserted = 0
     for agg in aggs:
-        finalized = agg.flush_all() if drain else agg.flush_finalized()
+        finalized = agg.peek_all() if drain else agg.peek_finalized()
         if not finalized:
             continue
 
@@ -84,8 +91,9 @@ def flush_candles(
             clickhouse_client.insert(
                 table_name,
                 batch,
-                column_names=["symbol", "open_time", "open", "high", "low", "close", "volume"],
+                column_names=["symbol", "timestamp", "open", "high", "low", "close", "volume"],
             )
+            agg.acknowledge(finalized)
             inserted += len(batch)
         except Exception:
             logger.exception("failed to insert %s candles into %s", len(batch), table_name)

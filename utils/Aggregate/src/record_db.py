@@ -33,7 +33,7 @@ class ProducerKafkaConfig:
     def from_env() -> "ProducerKafkaConfig":
         return ProducerKafkaConfig(
             bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-            topic=os.getenv("KAFKA_TOPIC", "ohlcv-topic"),
+            topic=os.getenv("KAFKA_PUSH_TOPIC", "ohlcv-topic"),
         )
 
 
