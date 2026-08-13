@@ -7,7 +7,7 @@ import threading
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Protocol
-import clickhouse_connect
+from src.clickhouse_client import build_clickhouse_client
 from dotenv import load_dotenv
 
 from src.aggregator import OHLCVAggregator
@@ -41,14 +41,7 @@ def build_aggregators() -> list[OHLCVAggregator]:
     return [OHLCVAggregator(timeframe=time_frame) for time_frame in TIMEFRAMES]
 
 
-def build_clickhouse_client() -> clickhouse_connect.driver.Client:
-    return clickhouse_connect.get_client(
-        host=os.getenv("CLICKHOUSE_HOST", "localhost"),
-        port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
-        user=os.getenv("CLICKHOUSE_USER", "default"),
-        password=os.getenv("CLICKHOUSE_PASSWORD", ""),
-        database=os.getenv("CLICKHOUSE_DB", "default"),
-    )
+
 
 
 def _candle_rows(finalized: list) -> list[list[object]]:
@@ -108,6 +101,7 @@ def consume_loop(aggs: list[OHLCVAggregator], stop_event: threading.Event) -> No
         with ConsumerClient(consumer_config) as consumer:
             while not stop_event.is_set():
                 item = consumer.poll(timeout=KAFKA_POLL_TIMEOUT_SECONDS)
+                print(item)
                 if item is None:
                     continue
 
