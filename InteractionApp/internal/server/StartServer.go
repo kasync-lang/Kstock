@@ -32,7 +32,8 @@ func StartServer(ctx context.Context) {
 	log.Printf("Starting Server")
 
 	if _, err := jwk.GetKeystore(); err != nil {
-		log.Fatal("JWT Keystore Error", err.Error())
+		//log.Fatal("JWT Keystore Error", err.Error())
+		log.Print("JWT Keystore Error", err.Error())
 	} else {
 		log.Printf("JWT Keystore success")
 	}

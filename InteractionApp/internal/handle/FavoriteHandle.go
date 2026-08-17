@@ -10,8 +10,14 @@ import (
 
 func GetAllFavorite(c *gin.Context) {
 	claims, ok := c.Get("claims")
-	sub, err := claims.(jwt.MapClaims).GetSubject()
-	if !ok || err != nil {
+	mapClaims, claimsOK := claims.(jwt.MapClaims)
+	if !ok || !claimsOK {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+	sub, err := mapClaims.GetSubject()
+	if err != nil {
 		c.JSON(401, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
@@ -48,8 +54,14 @@ func GetAllFavorite(c *gin.Context) {
 
 func AddFavorite(c *gin.Context) {
 	claims, ok := c.Get("claims")
-	sub, err := claims.(jwt.MapClaims).GetSubject()
-	if !ok || err != nil {
+	mapClaims, claimsOK := claims.(jwt.MapClaims)
+	if !ok || !claimsOK {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+	sub, err := mapClaims.GetSubject()
+	if err != nil {
 		c.JSON(401, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return
@@ -69,8 +81,14 @@ func AddFavorite(c *gin.Context) {
 }
 func RemoveFavorite(c *gin.Context) {
 	claims, ok := c.Get("claims")
-	sub, err := claims.(jwt.MapClaims).GetSubject()
-	if !ok || err != nil {
+	mapClaims, claimsOK := claims.(jwt.MapClaims)
+	if !ok || !claimsOK {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+	sub, err := mapClaims.GetSubject()
+	if err != nil {
 		c.JSON(401, gin.H{"error": "Unauthorized"})
 		c.Abort()
 		return

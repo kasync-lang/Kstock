@@ -51,6 +51,7 @@ func GetAsset(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 			c.Abort()
 			log.Printf("Price for symbol %s not found in price store", asset.Symbol)
+			return
 		}
 		asset.MarketValue = value
 		loss := asset.Quantity * (value - asset.Price)

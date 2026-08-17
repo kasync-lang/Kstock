@@ -40,5 +40,9 @@ func (s *PriceStore) Update(symbol string, value float64) {
 func (s *PriceStore) GetAll() map[string]float64 {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-	return s.data
+	prices := make(map[string]float64, len(s.data))
+	for symbol, price := range s.data {
+		prices[symbol] = price
+	}
+	return prices
 }

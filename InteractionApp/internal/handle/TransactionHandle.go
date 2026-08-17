@@ -283,7 +283,7 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		c.Abort()
 		return
 	}
-	dataSellResponse.Message = "BUY transaction successful"
+	dataSellResponse.Message = "SELL transaction successful"
 
 	c.JSON(http.StatusOK, dataSellResponse)
 	log.Printf("SELL transaction completed: user=%s, symbol=%s, amount=%d, price=%.2f", user_id, symbol, amount, price)

@@ -13,7 +13,7 @@ import (
 )
 
 type symbolsResponse struct {
-	Data []dto.SymbolPublic `json:"data"`
+	Data []dto.SymbolPreview `json:"data"`
 }
 
 type symbolDetailResponse struct {
@@ -51,6 +51,9 @@ func TestGetSymbolsOK(t *testing.T) {
 	}
 	if resp.Data[0].Ticker != "AAPL" {
 		t.Fatalf("expected ticker AAPL, got %s", resp.Data[0].Ticker)
+	}
+	if resp.Data[0].LastPrice != 0 || resp.Data[0].PercentChange != 0 {
+		t.Fatalf("expected zero price fields without ClickHouse history, got lastPrice=%v percentChange=%v", resp.Data[0].LastPrice, resp.Data[0].PercentChange)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -117,5 +120,3 @@ func TestGetSymbolDetailOK(t *testing.T) {
 		t.Fatalf("sqlmock expectations: %v", err)
 	}
 }
-
-

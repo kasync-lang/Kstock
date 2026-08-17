@@ -4,5 +4,5 @@ import "github.com/gin-gonic/gin"
 import "Kstock/internal/handle"
 
 func RegisterSocketRoute(router *gin.RouterGroup) {
-	router.Handle("GET", "/ws", handle.UpgradeSocketStreamHandle)
+	router.Handle("GET", "/ws/price", handle.UpgradeSocketStreamHandle)
 }

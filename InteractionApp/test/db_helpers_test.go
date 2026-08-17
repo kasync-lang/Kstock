@@ -1,9 +1,8 @@
 package test
 
 import (
-	"testing"
-
 	"Kstock/internal/server"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
@@ -22,5 +21,3 @@ func setupMockDB(t *testing.T) sqlmock.Sqlmock {
 	})
 	return mock
 }
-
-

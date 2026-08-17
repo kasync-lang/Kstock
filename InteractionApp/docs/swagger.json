@@ -758,6 +758,30 @@
           }
         }
       },
+      "SymbolPreview": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SymbolPublic"
+          },
+          {
+            "type": "object",
+            "required": [
+              "lastPrice",
+              "percentChange"
+            ],
+            "properties": {
+              "lastPrice": {
+                "type": "number",
+                "description": "Most recent daily closing price. Zero when no price history is available."
+              },
+              "percentChange": {
+                "type": "number",
+                "description": "Percentage change from the previous daily close. Zero when unavailable."
+              }
+            }
+          }
+        ]
+      },
       "SymbolBaseDetail": {
         "type": "object",
         "required": [
@@ -822,7 +846,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SymbolPublic"
+              "$ref": "#/components/schemas/SymbolPreview"
             }
           }
         }

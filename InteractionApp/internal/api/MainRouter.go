@@ -10,7 +10,7 @@ import (
 func RegisterAllRoutes(routes *gin.Engine) {
 	routes.Use(middleware.OWASPSecurityHeaders())
 	routes.Use(middleware.RateLimit(100, time.Minute))
-	routes.Use(middleware.AuthMiddleware())
+	//routes.Use(middleware.AuthMiddleware())
 	main_route := routes.Group("/api")
 	RegisterSymbolRoutes(main_route)
 	RegisterFavoriteRoutes(main_route)

@@ -37,9 +37,11 @@ func GetHistoryChart(c *gin.Context) {
 	symbol := c.Query("symbol")
 	from := c.Query("from")
 	to := c.DefaultQuery("to", strconv.FormatInt(time.Now().UTC().Unix(), 10))
-
+	symbol = strings.TrimSpace(strings.ToUpper(symbol))
+	from = strings.TrimSpace(strings.ToUpper(from))
+	to = strings.TrimSpace(strings.ToUpper(to))
 	if symbol == "" || from == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required query params: symbol, from"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required query params: symbol or from"})
 		return
 	}
 

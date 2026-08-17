@@ -27,6 +27,11 @@ func CreateAlert(c *gin.Context) {
 		c.Abort()
 		return
 	}
+	if data_create.Triggers == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "triggers is required"})
+		c.Abort()
+		return
+	}
 	db := server.GetDB()
 	symbol := data_create.Symbol
 	is_active := data_create.Active
@@ -44,7 +49,7 @@ func CreateAlert(c *gin.Context) {
 		_, err4 := db.Exec(query_create_trigger, alert_id, trigger.Indicator, trigger.Operator, trigger.Threshold)
 		if err4 != nil {
 			c.JSON(500, gin.H{"error": "Internal Server Error"})
-			log.Println(err.Error())
+			log.Println(err4.Error())
 			c.Abort()
 			return
 		}
@@ -63,9 +68,6 @@ func GetAlertsBySymbol(c *gin.Context) {
 	}
 	db := server.GetDB()
 
-	query_get_alerts := `select alert.id from alert where user_id = $1 and symbol = $2`
-	var alert_id []string
-	db.Select(&alert_id, query_get_alerts, sub, symbol)
 	query2 := `SELECT json_build_object(
                'id', a.id,
                'symbol', a.symbol,
@@ -94,6 +96,7 @@ WHERE a.symbol = $1 AND a.user_id = $2;`
 		c.Abort()
 		return
 	}
+	defer row.Close()
 	for row.Next() {
 		err := row.Scan(&raw)
 		if err != nil {
@@ -102,7 +105,7 @@ WHERE a.symbol = $1 AND a.user_id = $2;`
 			return
 		}
 	}
-	if err != nil {
+	if err := row.Err(); err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		c.Abort()
 		return

@@ -99,6 +99,8 @@ func (m *Manager) removeClient(c *Client) {
 	}
 }
 func (m *Manager) eventHandler(subscription Subscription, c *Client) error {
+	m.Lock()
+	defer m.Unlock()
 	if handler, ok := m.handlers[subscription.Type]; ok {
 		return handler(subscription, c)
 	}

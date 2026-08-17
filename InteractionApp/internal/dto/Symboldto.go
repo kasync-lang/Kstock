@@ -6,18 +6,21 @@ type SymbolBaseDetail struct {
 	Exhange              string  `json:"exchange" db:"exchange"`
 	IPO                  string  `json:"ipo" db:"ipo"`
 	MarketCapitalization float64 `json:"marketCapitalization" db:"market_capitalization"`
-	Name                 string  `json:"name" db:"name"`
 	Phone                string  `json:"phone" db:"phone"`
 	ShareOutstanding     float64 `json:"shareOutstanding" db:"share_outstanding"`
-	Ticker               string  `json:"ticker" db:"ticker"`
 	Website              string  `json:"weburl" db:"weburl"`
-	Logo                 string  `json:"logo" db:"logo"`
 	Industry             string  `json:"industry" db:"finnhub_industry"`
+	SymbolPublic
 }
 type SymbolPublic struct {
 	Ticker string `json:"ticker" db:"ticker"`
 	Name   string `json:"name" db:"name"`
 	Logo   string `json:"logo" db:"logo"`
+}
+type SymbolPreview struct {
+	SymbolPublic
+	LastPrice     float64 `json:"lastPrice"`
+	PercentChange float64 `json:"percentChange"`
 }
 type QuerySymbol struct {
 	Name    string `form:"name" binding:"omitempty" default:""`
