@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -287,4 +288,94 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 
 	c.JSON(http.StatusOK, dataSellResponse)
 	log.Printf("SELL transaction completed: user=%s, symbol=%s, amount=%d, price=%.2f", user_id, symbol, amount, price)
+}
+
+func TransactionHistoryHandle(c *gin.Context) {
+	const pageSize = 50
+
+	claims, ok := c.Get("claims")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	mapClaims, ok := claims.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	sub, err := mapClaims.GetSubject()
+	if err != nil || sub == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		c.Abort()
+		return
+	}
+
+	page := 1
+	if pageQuery := c.Query("page"); pageQuery != "" {
+		page, err = strconv.Atoi(pageQuery)
+		if err != nil || page < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "page must be a positive integer",
+			})
+			c.Abort()
+			return
+		}
+	}
+
+	db := server.GetDB()
+
+	var total int
+	err = db.Get(
+		&total,
+		`SELECT COUNT(*) FROM transaction WHERE user_id = $1`,
+		sub,
+	)
+	if err != nil {
+		log.Printf("Failed to count transaction history for user %s: %v", sub, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve transaction history",
+		})
+		c.Abort()
+		return
+	}
+
+	offset := (page - 1) * pageSize
+	history := make([]dto.TransactionHistoryItem, 0)
+
+	err = db.Select(
+		&history,
+		`
+		SELECT id, amount, symbol, operation, price, time_transacted
+		FROM transaction
+		WHERE user_id = $1
+		ORDER BY time_transacted DESC, id DESC
+		LIMIT $2 OFFSET $3
+		`,
+		sub,
+		pageSize,
+		offset,
+	)
+	if err != nil {
+		log.Printf("Failed to retrieve transaction history for user %s: %v", sub, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve transaction history",
+		})
+		c.Abort()
+		return
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+
+	c.JSON(http.StatusOK, dto.TransactionHistoryResponse{
+		Data:       history,
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+		HasNext:    page < totalPages,
+	})
 }
