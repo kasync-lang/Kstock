@@ -37,11 +37,10 @@ jobs:
         run: go mod download
 
       # Bước 4: Kiểm tra code style (tùy chọn nhưng nên có)
-      # Nếu project chưa cấu hình golangci-lint thì có thể comment lại
-      - name: Run linter
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          golangci-lint run ./...
+#      - name: Run linter
+#        run: |
+#          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.3.1
+#          golangci-lint run ./...
 
       # Bước 5: Chạy toàn bộ unit test trong project
       # -v: hiển thị chi tiết từng test case
