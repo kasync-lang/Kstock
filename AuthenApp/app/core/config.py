@@ -7,15 +7,16 @@ from typing_extensions import Self
 import warnings
 
 
-KEY_DIR = os.environ["PRIVATE_KEY_PATH"]
+KEY_DIR = os.getenv("PRIVATE_KEY_PATH", ".")
 class KeyStore:
     private_key = None
     public_key = None
     @classmethod
     def load_key(cls):
-
         private_key_pem_path = os.path.join(KEY_DIR, "private.pem")
         public_key_pem_path = os.path.join(KEY_DIR, "public.pem")
+        secrets_client_google_path = os.path.join(KEY_DIR, "client_secret.json")
+        logging.warning("Loading Google client secrets from: {}".format(secrets_client_google_path))
         logging.warning("Loading private key from: {}".format(private_key_pem_path))
         logging.warning("Loading public key from: {}".format(public_key_pem_path))
         if cls.private_key is None or cls.public_key is None:
@@ -23,6 +24,8 @@ class KeyStore:
                 cls.private_key = key_file.read()
             with open(public_key_pem_path, "rb") as key_file:
                 cls.public_key = key_file.read()
+        if not os.path.exists(secrets_client_google_path):
+            logging.warning(f"Google client secrets file not found at {secrets_client_google_path}")
 def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, str) and not v.startswith("["):
         return [i.strip() for i in v.split(",")]
@@ -59,7 +62,10 @@ class Setting(BaseSettings):
     PROJECT_NAME: str | None = "Kstock Authentication"
     FRONTEND_HOST: str
     MONGO_URI:str
-    PREFIX_API:str = "/api/v1"
+    PREFIX_API:str = ""
+    DOMAIN: str = "http://localhost:8080"
+    GOOGLE_CLIENT_SECRET_PATH: str = os.path.join(KEY_DIR, "client_secret.json")
+    CALLBACK_URL: str = f"{DOMAIN}{PREFIX_API}/auth/google/callback"
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:
         if not self.EMAILS_FROM_NAME:
@@ -79,7 +85,7 @@ class Setting(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    FRONEND_HOST: str | None = None
+    FRONTEND_HOST: str | None = None
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

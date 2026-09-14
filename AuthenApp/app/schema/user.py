@@ -10,6 +10,10 @@ class UserBase(BaseModel):
     model_config = {
         "extra": "ignore"
     }
+class Oauth2AccountBase(UserBase):
+    provider: str
+    provider_account_id: str
+    scope: Optional[str] | None = Field(default=None)
 
 class UserCreate(UserBase):
     password: str = Field(min_length=4, max_length=128)

@@ -50,7 +50,8 @@ async def update_user_me(*, user_in: UserUpdateMe, current_user: CurrentUser) ->
     userdb = await User.find_one(User.id == current_user.id)
     await userdb.update({"$set": user_data})
 
-    return
+    updated_user = await User.find_one(User.id == current_user.id)
+    return parse_user_db_to_currentuser(updated_user)
 
 @router.patch("/me/password", response_model=Message)
 async def update_user_password_me(body: UpdatePassword, current_user: CurrentUser) -> Any:

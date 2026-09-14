@@ -2,16 +2,17 @@ import logging
 from datetime import timedelta
 from typing import Annotated, Any
 
+import requests
+from google_auth_oauthlib.flow import Flow
+import secrets
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from app.schema.token import Token
 from app.core import crud
 from app.core import security
-from app.api.deps import get_current_active_superuser
-from app.schema.user import UserPublic, NewPassword, Message, UserCreate, UserRegister
+from app.schema.user import UserPublic, NewPassword, Message, UserCreate, UserRegister, Oauth2AccountBase
 from app.utils import verify_password_reset_token
-from fastapi.responses import HTMLResponse
 from app.utils import ( generate_password_reset_token,
                         generate_reset_password_email,
                         generate_signup_verify_email,
@@ -20,10 +21,12 @@ send_email,
 from app.core.security import is_strong_password
 from app.api.deps import CurrentUser, parse_user_db_to_currentuser
 from app.core.config import settings
-from fastapi import BackgroundTasks
-from app.model.User import User
-
-
+from fastapi import BackgroundTasks, Request
+from app.model.User import User, Oauth2Account
+from fastapi.responses import RedirectResponse
+SCOPES = ['https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'openid']
 router = APIRouter(tags=["login"])
 @router.post("/login/access-token")
 async def login_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
@@ -112,3 +115,95 @@ async def recover_password(email: str) -> Message:
     send_email(email_to=user.email, subject= email_data.subject, html_content=email_data.html_content)
     return Message(message="Password recovery email sent")
 
+@router.get("/auth/google")
+async def auth_google():
+    path_secrets = settings.GOOGLE_CLIENT_SECRET_PATH
+    flow = Flow.from_client_secrets_file(
+        path_secrets,
+        scopes=SCOPES,
+        redirect_uri=settings.CALLBACK_URL,
+
+    )
+    flow.redirect_uri = settings.CALLBACK_URL
+    authorization_url, state = flow.authorization_url(
+        state=secrets.token_urlsafe(32),
+        code_challenge_method='S256'
+    )
+    response = RedirectResponse(authorization_url)
+
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        secure=False,  # localhost HTTP thì tạm False
+        samesite="lax",
+        max_age=300,
+    )
+    response.set_cookie(
+    key="oauth_code_verifier",
+    value=flow.code_verifier,
+    httponly=True,
+    secure=True,
+    samesite="lax",
+    max_age=300,
+)
+    return response
+
+@router.get("/auth/google/callback")
+async def callback(request: Request):
+    state = request.query_params.get("state")
+    code = request.query_params.get("code")
+    url_get_userinfo = "https://www.googleapis.com/oauth2/v2/userinfo"
+
+    cookie_state = request.cookies.get("oauth_state")
+    code_verifier = request.cookies.get("oauth_code_verifier")
+    if not state or state != cookie_state:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state")
+
+    if not code_verifier:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing code verifier")
+
+    flow = Flow.from_client_secrets_file(
+        settings.GOOGLE_CLIENT_SECRET_PATH,
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=settings.CALLBACK_URL,
+    )
+    flow.redirect_uri = 'http://localhost:8080/auth/google/callback'
+    flow.code_verifier=code_verifier
+    try:
+        flow.fetch_token(code=code, code_verifier=code_verifier)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Authentication failed: {str(e)}")
+    credentials = flow.credentials
+    #check granted scopes
+    if SCOPES[0] not in credentials.scopes or SCOPES[1] not in credentials.scopes or SCOPES[2] not in credentials.scopes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing required scopes")
+    print("="*50)
+    response = requests.get(url_get_userinfo, headers={"Authorization": f"Bearer {credentials.token}"})
+    if response.status_code != 200:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch user info")
+    user_info = response.json()
+    email, name = user_info.get("email"), user_info.get("name")
+    print("="*50)
+    print(user_info)
+    oauth_account = await crud.get_oauth_account_by_email(email=email)
+    if not oauth_account:
+        oauth_account_create = Oauth2Account(
+            provider="google",
+            email=email,
+            provider_account_id=user_info.get("id"),
+            scope=credentials.scopes,
+            name=name,
+            is_actived=True,
+
+        )
+        oauth_account = await crud.create_oauth2_account(oauth_account=oauth_account_create)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+
+    return Token(
+        access_token=security.create_access_token(
+            subject=oauth_account.id, expires_delta=access_token_expires
+        )
+    )
