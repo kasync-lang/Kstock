@@ -60,6 +60,8 @@ class Setting(BaseSettings):
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: EmailStr | None = None
     PROJECT_NAME: str | None = "Kstock Authentication"
+    REDIS_HOST: str
+    REDIS_PORT: int
     FRONTEND_HOST: str
     MONGO_URI:str
     PREFIX_API:str = ""

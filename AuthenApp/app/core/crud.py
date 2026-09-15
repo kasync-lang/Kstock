@@ -37,7 +37,7 @@ async def get_user_by_email(*, email:str) -> User | None:
     return await User.find_one(User.email==email)
 
 async def get_oauth_account_by_email(*, email: str) -> Oauth2Account | None:
-    print(f"Searching for OAuth2 account with email: {email}")
+
     return await Oauth2Account.find_one(Oauth2Account.email==email)
 
 

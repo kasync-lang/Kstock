@@ -1,7 +1,6 @@
 import logging
 from datetime import timedelta
 from typing import Annotated, Any
-
 import requests
 from google_auth_oauthlib.flow import Flow
 import secrets
@@ -19,7 +18,7 @@ from app.utils import ( generate_password_reset_token,
 send_email,
                         )
 from app.core.security import is_strong_password
-from app.api.deps import CurrentUser, parse_user_db_to_currentuser
+from app.api.deps import CurrentUser, parse_user_db_to_currentuser, get_redis
 from app.core.config import settings
 from fastapi import BackgroundTasks, Request
 from app.model.User import User, Oauth2Account
@@ -150,7 +149,7 @@ async def auth_google():
     return response
 
 @router.get("/auth/google/callback")
-async def callback(request: Request):
+async def callback(request: Request, redis = Depends(get_redis)):
     state = request.query_params.get("state")
     code = request.query_params.get("code")
     url_get_userinfo = "https://www.googleapis.com/oauth2/v2/userinfo"
@@ -179,14 +178,13 @@ async def callback(request: Request):
     #check granted scopes
     if SCOPES[0] not in credentials.scopes or SCOPES[1] not in credentials.scopes or SCOPES[2] not in credentials.scopes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing required scopes")
-    print("="*50)
+
     response = requests.get(url_get_userinfo, headers={"Authorization": f"Bearer {credentials.token}"})
     if response.status_code != 200:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch user info")
     user_info = response.json()
     email, name = user_info.get("email"), user_info.get("name")
-    print("="*50)
-    print(user_info)
+
     oauth_account = await crud.get_oauth_account_by_email(email=email)
     if not oauth_account:
         oauth_account_create = Oauth2Account(
@@ -199,11 +197,18 @@ async def callback(request: Request):
 
         )
         oauth_account = await crud.create_oauth2_account(oauth_account=oauth_account_create)
+
+    codeexchange = secrets.token_urlsafe(32)
+    await redis.set(f"oauth_code:{codeexchange}", str(oauth_account.id), ex=120)
+    return RedirectResponse(f"{settings.FRONTEND_URL}/oauth/exchange?code={codeexchange}")
+@router.post("/oauth/exchange")
+async def echange(code: str, redis = Depends(get_redis)):
+    user_id = await redis.getdel(f"oauth_code:{code}")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-
-
     return Token(
         access_token=security.create_access_token(
-            subject=oauth_account.id, expires_delta=access_token_expires
+            subject=user_id.decode("utf-8"), expires_delta=access_token_expires
         )
     )

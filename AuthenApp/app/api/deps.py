@@ -22,6 +22,12 @@ reuseable_oauth2 = OAuth2PasswordBearer(
 )
 TokenDep = Annotated[str, Depends(reuseable_oauth2)]
 
+from fastapi import Request
+
+
+def get_redis(request: Request):
+    return request.app.state.redis
+
 
 
 

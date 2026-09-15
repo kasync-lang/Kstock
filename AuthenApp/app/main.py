@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.core.config import settings
 from starlette.responses import HTMLResponse
 from fastapi import Request
 from app.core.config import KeyStore
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 from app.core.db import init_db
 from fastapi.templating import Jinja2Templates
 from app.api.main import api_router
+import redis.asyncio as redis
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,14 @@ async def lifespan(app: FastAPI):
     KeyStore.load_key()
     load_dotenv(verbose=True)
     await init_db()
+
+    app.state.redis = redis.Redis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        decode_responses=True,
+    )
     yield
+    await app.state.redis.aclose()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
