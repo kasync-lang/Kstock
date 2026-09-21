@@ -4,6 +4,7 @@ import (
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
 	"log"
+	"math"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,7 @@ import (
 
 func GetAsset(c *gin.Context) {
 	claims, ok := c.Get("claims")
-	v, ok := c.Get("price_store")
+	v, _ := c.Get("price_store")
 	ps, ok2 := v.(*dto.PriceStore)
 	if !ok || !ok2 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
@@ -47,6 +48,9 @@ func GetAsset(c *gin.Context) {
 			return
 		}
 		value, ok := ps.Get(asset.Symbol)
+		if asset.Symbol == "USD" {
+			value, ok = 1, true
+		}
 		if !ok {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
 			c.Abort()
@@ -71,4 +75,50 @@ func GetAsset(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, assets)
+}
+
+func Topup(c *gin.Context) {
+	claims, ok := c.Get("claims")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	mapClaims, ok := claims.(jwt.MapClaims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userID, err := mapClaims.GetSubject()
+	if err != nil || userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var request dto.TopupRequest
+	if err := c.ShouldBindJSON(&request); err != nil || math.IsNaN(request.Amount) || math.IsInf(request.Amount, 0) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "amount must be a positive USD value"})
+		return
+	}
+
+	var newBalance float64
+	err = server.GetDB().Get(&newBalance, `
+		INSERT INTO assets (user_id, symbol, quantity, unit_price)
+		VALUES ($1, 'USD', $2, 1)
+		ON CONFLICT (user_id, symbol)
+		DO UPDATE SET quantity = assets.quantity + EXCLUDED.quantity
+		RETURNING quantity
+	`, userID, request.Amount)
+	if err != nil {
+		log.Printf("Failed to top up USD balance for user %s: %v", userID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to top up balance"})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.TopupResponse{
+		Message:       "Top-up successful",
+		Amount:        request.Amount,
+		NewUSDBalance: newBalance,
+	})
 }

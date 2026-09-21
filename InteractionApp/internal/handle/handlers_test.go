@@ -120,6 +120,53 @@ func TestGetAssetCalculatesProfitAndHandlesMissingPrice(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("missing price status = %d", w.Code)
 	}
+
+	mock = setupDB(t)
+	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, unit_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "unit_price"}).AddRow("USD", 125.5, 1.0))
+	c, w = handlerContext(http.MethodGet, "/assets", nil, true)
+	c.Set("price_store", dto.NewPriceStore())
+	GetAsset(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("USD asset status = %d: %s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTopup(t *testing.T) {
+	c, w := handlerContext(http.MethodPost, "/assets/topup", []byte(`{"amount":0}`), true)
+	Topup(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid amount status = %d", w.Code)
+	}
+
+	c, w = handlerContext(http.MethodPost, "/assets/topup", []byte(`{"amount":25}`), false)
+	Topup(c)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("missing claims status = %d", w.Code)
+	}
+
+	mock := setupDB(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		INSERT INTO assets (user_id, symbol, quantity, unit_price)
+		VALUES ($1, 'USD', $2, 1)
+		ON CONFLICT (user_id, symbol)
+		DO UPDATE SET quantity = assets.quantity + EXCLUDED.quantity
+		RETURNING quantity
+	`)).WithArgs("user-1", 25.5).WillReturnRows(sqlmock.NewRows([]string{"quantity"}).AddRow(125.5))
+	c, w = handlerContext(http.MethodPost, "/assets/topup", []byte(`{"amount":25.5}`), true)
+	Topup(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("top-up status = %d: %s", w.Code, w.Body.String())
+	}
+	var response dto.TopupResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.Amount != 25.5 || response.NewUSDBalance != 125.5 {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTransactionValidationAndInsufficientBalance(t *testing.T) {

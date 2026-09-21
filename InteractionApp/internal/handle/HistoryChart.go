@@ -4,7 +4,6 @@ import (
 	"Kstock/internal/config"
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -172,28 +171,27 @@ func resolutionToTableName(resolution string) (string, error) {
 	}
 }
 
-// ensureResolutionTable creates the resolution table if it does not exist.
-func ensureResolutionTable(ctx context.Context, conn interface {
-	Exec(context.Context, string, ...interface{}) error
-}, db, table string) error {
-	// columns: s String, t DateTime, o Float64, h Float64, l Float64, c Float64, v Float64
-	create := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.%s (
-		s String,
-		t DateTime,
-		o Float64,
-		h Float64,
-		l Float64,
-		c Float64,
-		v Float64
-	) ENGINE = MergeTree()
-	ORDER BY (s, t)`, db, table)
-	return conn.Exec(ctx, create)
-}
-
-// insertIntoResolutionTable inserts an aggregated candle into the resolution table.
-func insertIntoResolutionTable(ctx context.Context, conn interface {
-	Exec(context.Context, string, ...interface{}) error
-}, db, table, symbol string, t time.Time, o, h, l, c, v float64) error {
-	insert := fmt.Sprintf("INSERT INTO %s.%s (s,t,o,h,l,c,v) VALUES (?, ?, ?, ?, ?, ?, ?)", db, table)
-	return conn.Exec(ctx, insert, symbol, t.UTC(), o, h, l, c, v)
-}
+//func ensureResolutionTable(ctx context.Context, conn interface {
+//	Exec(context.Context, string, ...interface{}) error
+//}, db, table string) error {
+//	// columns: s String, t DateTime, o Float64, h Float64, l Float64, c Float64, v Float64
+//	create := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.%s (
+//		s String,
+//		t DateTime,
+//		o Float64,
+//		h Float64,
+//		l Float64,
+//		c Float64,
+//		v Float64
+//	) ENGINE = MergeTree()
+//	ORDER BY (s, t)`, db, table)
+//	return conn.Exec(ctx, create)
+//}
+//
+//// insertIntoResolutionTable inserts an aggregated candle into the resolution table.
+//func insertIntoResolutionTable(ctx context.Context, conn interface {
+//	Exec(context.Context, string, ...interface{}) error
+//}, db, table, symbol string, t time.Time, o, h, l, c, v float64) error {
+//	insert := fmt.Sprintf("INSERT INTO %s.%s (s,t,o,h,l,c,v) VALUES (?, ?, ?, ?, ?, ?, ?)", db, table)
+//	return conn.Exec(ctx, insert, symbol, t.UTC(), o, h, l, c, v)
+//}

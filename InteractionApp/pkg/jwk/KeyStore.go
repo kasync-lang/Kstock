@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	"sync"
@@ -15,7 +14,7 @@ import (
 
 var (
 	publicKeyCache *rsa.PublicKey
-	once           sync.Once
+	publicKeyMu    sync.RWMutex
 )
 
 func BuildRSAKeyFromJWK(nB64Url, eB64Url string) (*rsa.PublicKey, error) {
@@ -41,6 +40,9 @@ func BuildRSAKeyFromJWK(nB64Url, eB64Url string) (*rsa.PublicKey, error) {
 	return pub, nil
 }
 func GetRawJWK() (*JWK, error) {
+	if config.Cfg == nil || config.Cfg.AuthenHost == "" {
+		return nil, errors.New("JWK endpoint is not configured")
+	}
 	jwkURL := config.Cfg.AuthenHost
 	resp, err := http.Get(jwkURL)
 
@@ -49,6 +51,9 @@ func GetRawJWK() (*JWK, error) {
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, errors.New("JWK endpoint returned an unsuccessful status")
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -64,20 +69,29 @@ func GetRawJWK() (*JWK, error) {
 }
 
 func GetKeystore() (*rsa.PublicKey, error) {
-
-	once.Do(func() {
-		jwkData, err := GetRawJWK()
-		log.Println("jwk_data", jwkData)
-		if err != nil {
-
-			return
-		}
-		publicKeyCache, err = BuildRSAKeyFromJWK(jwkData.N, jwkData.E)
-		log.Print(publicKeyCache)
-	})
-
-	if publicKeyCache == nil {
-		return nil, errors.New("failed to get public key")
+	publicKeyMu.RLock()
+	key := publicKeyCache
+	publicKeyMu.RUnlock()
+	if key != nil {
+		return key, nil
 	}
+
+	// Only one request fetches the JWK while the cache is empty. Other requests
+	// wait here and reuse the cached key after a successful fetch.
+	publicKeyMu.Lock()
+	defer publicKeyMu.Unlock()
+	if publicKeyCache != nil {
+		return publicKeyCache, nil
+	}
+
+	jwkData, err := GetRawJWK()
+	if err != nil {
+		return nil, err
+	}
+	key, err = BuildRSAKeyFromJWK(jwkData.N, jwkData.E)
+	if err != nil {
+		return nil, err
+	}
+	publicKeyCache = key
 	return publicKeyCache, nil
 }

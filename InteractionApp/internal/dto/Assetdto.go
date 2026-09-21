@@ -11,3 +11,13 @@ type Assets struct {
 	Data             []Asset `json:"data" db:"_"`
 	AllProfitAndLoss float64 `json:"all_profit_and_loss"`
 }
+
+type TopupRequest struct {
+	Amount float64 `json:"amount" binding:"required,gt=0"`
+}
+
+type TopupResponse struct {
+	Message       string  `json:"message"`
+	Amount        float64 `json:"amount"`
+	NewUSDBalance float64 `json:"new_usd_balance"`
+}

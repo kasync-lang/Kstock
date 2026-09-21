@@ -59,8 +59,10 @@ func main() {
 		log.Printf("http: listening on %s", addr)
 		err := httpSrv.ListenAndServe()
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
+
 			return nil
 		}
+		print(err.Error())
 		return err
 	})
 

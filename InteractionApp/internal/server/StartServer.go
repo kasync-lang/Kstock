@@ -3,7 +3,6 @@ package server
 import (
 	"Kstock/internal/config"
 	"Kstock/internal/ksocket"
-	"Kstock/pkg/jwk"
 	"context"
 	"errors"
 	"log"
@@ -31,12 +30,6 @@ func StartServer(ctx context.Context) {
 	}
 	log.Printf("Starting Server")
 
-	if _, err := jwk.GetKeystore(); err != nil {
-		//log.Fatal("JWT Keystore Error", err.Error())
-		log.Print("JWT Keystore Error", err.Error())
-	} else {
-		log.Printf("JWT Keystore success")
-	}
 	instance, err2 := IntiDB()
 	if err2 != nil {
 		log.Fatal("Init DB error", err2)

@@ -65,14 +65,14 @@ func EventKafkaListener(ctx context.Context, cfg KafkaListenerConfig, handler Ka
 
 	cfg.applyDefault()
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  cfg.Brokers,
-		Topic:    cfg.Topic,
-		GroupID:  cfg.GroupID,
-		MinBytes: cfg.MinBytes,
-		MaxBytes: cfg.MaxBytes,
-		MaxWait:  cfg.MaxWait,
+		Brokers:     cfg.Brokers,
+		Topic:       cfg.Topic,
+		GroupID:     cfg.GroupID,
+		MinBytes:    cfg.MinBytes,
+		MaxBytes:    cfg.MaxBytes,
+		MaxWait:     cfg.MaxWait,
+		StartOffset: kafka.LastOffset,
 	})
-	reader.SetOffset(kafka.LastOffset)
 	defer func() {
 		if err := reader.Close(); err != nil {
 			log.Printf("kafka listener: close reader error topic=%s group=%s err=%v", cfg.Topic, cfg.GroupID, err)
