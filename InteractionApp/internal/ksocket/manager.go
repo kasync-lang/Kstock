@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -58,12 +59,16 @@ func checkOrigin(r *http.Request) bool {
 	if origin == "" {
 		return true
 	}
-	switch origin {
-	case "localhost", "https://kasyntech.com":
+	if origin == "localhost" || origin == "https://kasyntech.com" {
 		return true
-	default:
-		return false
 	}
+	if u, err := url.Parse(origin); err == nil {
+		host := u.Hostname()
+		if host == "localhost" || host == "127.0.0.1" || host == "kasyntech.com" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) UpdateWebSocket(w http.ResponseWriter, r *http.Request) {

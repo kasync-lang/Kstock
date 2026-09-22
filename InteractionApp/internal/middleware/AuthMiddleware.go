@@ -58,3 +58,32 @@ func TemporaryRegiterUser(claims jwt.Claims, c *gin.Context) {
 	}
 
 }
+
+func AuthSocketMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenStr := c.Query("token")
+		if tokenStr == "" {
+			auth_header := c.Request.Header.Get("Authorization")
+			if auth_header == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Authorization header is missing"})
+				c.Abort()
+				return
+			}
+			parts := strings.Split(auth_header, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Authorization header format"})
+				c.Abort()
+				return
+			}
+			tokenStr = parts[1]
+		}
+		claims, err := jwk.Verify(tokenStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
+			return
+		}
+		c.Set("claims", claims)
+		c.Next()
+	}
+}

@@ -95,7 +95,7 @@ func TestCreateAlertRejectsMissingTriggers(t *testing.T) {
 
 func TestGetAssetCalculatesProfitAndHandlesMissingPrice(t *testing.T) {
 	mock := setupDB(t)
-	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, unit_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "unit_price"}).AddRow("AAPL", 2, 100.0))
+	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, average_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "average_price"}).AddRow("AAPL", 2, 100.0))
 	store := dto.NewPriceStore()
 	store.Update("AAPL", 125)
 	c, w := handlerContext(http.MethodGet, "/assets", nil, true)
@@ -113,7 +113,7 @@ func TestGetAssetCalculatesProfitAndHandlesMissingPrice(t *testing.T) {
 	}
 
 	mock = setupDB(t)
-	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, unit_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "unit_price"}).AddRow("MSFT", 1, 100.0))
+	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, average_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "average_price"}).AddRow("MSFT", 1, 100.0))
 	c, w = handlerContext(http.MethodGet, "/assets", nil, true)
 	c.Set("price_store", dto.NewPriceStore())
 	GetAsset(c)
@@ -122,7 +122,7 @@ func TestGetAssetCalculatesProfitAndHandlesMissingPrice(t *testing.T) {
 	}
 
 	mock = setupDB(t)
-	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, unit_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "unit_price"}).AddRow("USD", 125.5, 1.0))
+	mock.ExpectQuery(regexp.QuoteMeta("select symbol, quantity, average_price from assets where user_id = $1")).WithArgs("user-1").WillReturnRows(sqlmock.NewRows([]string{"symbol", "quantity", "average_price"}).AddRow("USD", 125.5, 1.0))
 	c, w = handlerContext(http.MethodGet, "/assets", nil, true)
 	c.Set("price_store", dto.NewPriceStore())
 	GetAsset(c)
@@ -149,7 +149,7 @@ func TestTopup(t *testing.T) {
 
 	mock := setupDB(t)
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO assets (user_id, symbol, quantity, unit_price)
+		INSERT INTO assets (user_id, symbol, quantity, average_price)
 		VALUES ($1, 'USD', $2, 1)
 		ON CONFLICT (user_id, symbol)
 		DO UPDATE SET quantity = assets.quantity + EXCLUDED.quantity

@@ -21,6 +21,9 @@ func RegisterAllRoutes(routes *gin.Engine) {
 	RegisterAlertRoutes(privateRoute)
 	RegisterAssetRoutes(privateRoute)
 	RegisterTransactionHandle(privateRoute)
-	RegisterSocketRoute(privateRoute)
+
+	socketRoute := mainRoute.Group("socket")
+	socketRoute.Use(middleware.AuthSocketMiddleware())
+	RegisterSocketRoute(socketRoute)
 
 }

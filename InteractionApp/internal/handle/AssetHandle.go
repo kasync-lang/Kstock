@@ -29,7 +29,7 @@ func GetAsset(c *gin.Context) {
 	}
 	db := server.GetDB()
 	assets := dto.Assets{}
-	query_get_assets := `select symbol, quantity, unit_price from assets where user_id = $1`
+	query_get_assets := `select symbol, quantity, average_price from assets where user_id = $1`
 	rows, err2 := db.Queryx(query_get_assets, sub)
 	if err2 != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
@@ -104,7 +104,7 @@ func Topup(c *gin.Context) {
 
 	var newBalance float64
 	err = server.GetDB().Get(&newBalance, `
-		INSERT INTO assets (user_id, symbol, quantity, unit_price)
+		INSERT INTO assets (user_id, symbol, quantity, average_price)
 		VALUES ($1, 'USD', $2, 1)
 		ON CONFLICT (user_id, symbol)
 		DO UPDATE SET quantity = assets.quantity + EXCLUDED.quantity
