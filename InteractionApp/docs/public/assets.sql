@@ -9,7 +9,8 @@ create table assets
         constraint assets_symbol_fk
             references company_profile,
     quantity      integer        not null,
-    average_price numeric(10, 2) not null
+    average_price numeric(10, 2) not null,
+    constraint assets_user_symbol_key unique (user_id, symbol)
 );
 
 alter table assets

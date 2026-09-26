@@ -5,6 +5,7 @@ import (
 	"Kstock/internal/server"
 	"database/sql"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -30,9 +31,16 @@ func TransactionHandle(c *gin.Context) {
 	}
 
 	var order_data dto.Order
-	if err := c.ShouldBind(&order_data); err != nil {
+	if err := c.ShouldBindJSON(&order_data); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Bad Request"})
 		log.Printf("Error binding order data: %v", err)
+		c.Abort()
+		return
+	}
+
+	order_data.Symbol = strings.ToUpper(strings.TrimSpace(order_data.Symbol))
+	if order_data.Quantity <= 0 || order_data.Symbol == "" || order_data.Symbol == "USD" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quantity must be positive and symbol must be a tradable stock"})
 		c.Abort()
 		return
 	}
@@ -47,9 +55,9 @@ func TransactionHandle(c *gin.Context) {
 		return
 	}
 	priceToProcess, ok := ps.Get(order_data.Symbol)
-	if !ok {
+	if !ok || priceToProcess <= 0 || math.IsNaN(priceToProcess) || math.IsInf(priceToProcess, 0) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-		log.Printf("Error binding order data: %v", order_data.Symbol)
+		log.Printf("Price not found for order: %+v", order_data)
 		c.Abort()
 		return
 	}
@@ -71,6 +79,23 @@ func rollbackTx(tx *sqlx.Tx) {
 	}
 }
 
+// lockCashBalance creates an empty cash balance when necessary, then locks the
+// user's row until the enclosing transaction completes. This prevents two orders
+// from spending the same balance concurrently.
+func lockCashBalance(tx *sqlx.Tx, userID string) (float64, error) {
+	if _, err := tx.Exec(`INSERT INTO cash (user_id, amount) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
+		return 0, err
+	}
+
+	var balance float64
+	err := tx.Get(&balance, `SELECT COALESCE(amount, 0) FROM cash WHERE user_id = $1 FOR UPDATE`, userID)
+	return balance, err
+}
+
+func roundCurrency(amount float64) float64 {
+	return math.Round(amount*100) / 100
+}
+
 func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string, price float64, c *gin.Context) {
 	// Start transaction
 	tx, err := db.Beginx()
@@ -84,32 +109,31 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		return
 	}
 
-	// Get current USD balance
-	var usd_balance float64
-	err = tx.Get(&usd_balance, `SELECT COALESCE(quantity, 0) FROM assets WHERE user_id = $1 AND symbol = 'USD'`, user_id)
-	if err != nil && err != sql.ErrNoRows {
+	// Create and lock the dedicated cash row before checking the available balance.
+	cashBalance, err := lockCashBalance(tx, user_id)
+	if err != nil {
 		rollbackTx(tx)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get USD balance"})
-		log.Printf("Failed to get USD balance: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cash balance"})
+		log.Printf("Failed to get cash balance: %v", err)
 		c.Abort()
 		return
 	}
 
 	// Calculate required balance
-	required_balance := float64(amount) * price
-	dataBuyResponse.TotalCost = required_balance
+	requiredBalance := roundCurrency(float64(amount) * price)
+	dataBuyResponse.TotalCost = requiredBalance
 	// Check if user has enough balance
-	if usd_balance < required_balance {
+	if cashBalance < requiredBalance {
 		rollbackTx(tx)
 		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient balance"})
 		c.Abort()
 		return
 	}
 
-	// Get current symbol holdings and unit price
+	// Lock the holding row while recalculating its quantity and average price.
 	var old_symbol_amount int
 	var old_unit_price float64
-	err = tx.Get(&old_symbol_amount, `SELECT COALESCE(quantity, 0) FROM assets WHERE user_id = $1 AND symbol = $2`, user_id, symbol)
+	err = tx.QueryRowx(`SELECT quantity, average_price FROM assets WHERE user_id = $1 AND symbol = $2 FOR UPDATE`, user_id, symbol).Scan(&old_symbol_amount, &old_unit_price)
 	if err != nil && err != sql.ErrNoRows {
 		rollbackTx(tx)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get symbol holdings"})
@@ -118,38 +142,34 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		return
 	}
 
-	err = tx.Get(&old_unit_price, `SELECT COALESCE(unit_price, 0) FROM assets WHERE user_id = $1 AND symbol = $2`, user_id, symbol)
-	if err != nil && err != sql.ErrNoRows {
-		rollbackTx(tx)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get unit price"})
-		log.Printf("Failed to get unit price: %v", err)
-		c.Abort()
-		return
+	if err == sql.ErrNoRows {
+		old_symbol_amount = 0
+		old_unit_price = 0
 	}
 
 	// Calculate new holdings and average unit price
-	new_symbol_amount := amount + old_symbol_amount
-	new_unit_price := (float64(old_symbol_amount)*old_unit_price + float64(amount)*price) / float64(new_symbol_amount)
-	new_usd_balance := usd_balance - required_balance
-	dataBuyResponse.TotalHoldings = new_symbol_amount
-	// Update USD balance
-	_, err = tx.Exec(`UPDATE assets SET quantity = $1 WHERE user_id = $2 AND symbol = 'USD'`, new_usd_balance, user_id)
+	newSymbolAmount := amount + old_symbol_amount
+	newUnitPrice := (float64(old_symbol_amount)*old_unit_price + float64(amount)*price) / float64(newSymbolAmount)
+	newCashBalance := cashBalance - requiredBalance
+	dataBuyResponse.TotalHoldings = newSymbolAmount
+	// Update cash balance
+	_, err = tx.Exec(`UPDATE cash SET amount = $1 WHERE user_id = $2`, newCashBalance, user_id)
 	if err != nil {
 		rollbackTx(tx)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update USD balance"})
-		log.Printf("Failed to update USD balance: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cash balance"})
+		log.Printf("Failed to update cash balance: %v", err)
 		c.Abort()
 		return
 	}
-	dataBuyResponse.NewUsdBalance = new_usd_balance
+	dataBuyResponse.NewCashBalance = newCashBalance
 
 	// Upsert symbol holdings
 	_, err = tx.Exec(`
-		INSERT INTO assets (user_id, symbol, quantity, unit_price) 
+		INSERT INTO assets (user_id, symbol, quantity, average_price)
 		VALUES ($1, $2, $3, $4) 
 		ON CONFLICT (user_id, symbol) 
-		DO UPDATE SET quantity = EXCLUDED.quantity, unit_price = EXCLUDED.unit_price
-	`, user_id, symbol, new_symbol_amount, new_unit_price)
+		DO UPDATE SET quantity = EXCLUDED.quantity, average_price = EXCLUDED.average_price
+	`, user_id, symbol, newSymbolAmount, newUnitPrice)
 	if err != nil {
 		rollbackTx(tx)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update symbol holdings"})
@@ -157,7 +177,7 @@ func BuyTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol string
 		c.Abort()
 		return
 	}
-	dataBuyResponse.NewUnitPrice = new_unit_price
+	dataBuyResponse.NewUnitPrice = newUnitPrice
 
 	// Insert transaction history
 	_, err = tx.Exec(`
@@ -200,9 +220,9 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		return
 	}
 
-	// Get current symbol holdings
+	// Lock the holding row before validating and reducing it.
 	var current_symbol_amount int
-	err = tx.Get(&current_symbol_amount, `SELECT COALESCE(quantity, 0) FROM assets WHERE user_id = $1 AND symbol = $2`, user_id, symbol)
+	err = tx.Get(&current_symbol_amount, `SELECT quantity FROM assets WHERE user_id = $1 AND symbol = $2 FOR UPDATE`, user_id, symbol)
 	if err != nil && err != sql.ErrNoRows {
 		rollbackTx(tx)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get symbol holdings"})
@@ -219,36 +239,35 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		return
 	}
 
-	// Get current USD balance
-	var usd_balance float64
-	err = tx.Get(&usd_balance, `SELECT COALESCE(quantity, 0) FROM assets WHERE user_id = $1 AND symbol = 'USD'`, user_id)
-	if err != nil && err != sql.ErrNoRows {
+	// Lock or create the dedicated cash row before crediting sale proceeds.
+	cashBalance, err := lockCashBalance(tx, user_id)
+	if err != nil {
 		rollbackTx(tx)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get USD balance"})
-		log.Printf("Failed to get USD balance: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cash balance"})
+		log.Printf("Failed to get cash balance: %v", err)
 		c.Abort()
 		return
 	}
 
 	// Calculate new balances
-	sale_proceeds := float64(amount) * price
-	new_symbol_amount := current_symbol_amount - amount
-	new_usd_balance := usd_balance + sale_proceeds
+	saleProceeds := roundCurrency(float64(amount) * price)
+	newSymbolAmount := current_symbol_amount - amount
+	newCashBalance := cashBalance + saleProceeds
 
-	// Update USD balance
-	_, err = tx.Exec(`UPDATE assets SET quantity = $1 WHERE user_id = $2 AND symbol = 'USD'`, new_usd_balance, user_id)
+	// Update cash balance
+	_, err = tx.Exec(`UPDATE cash SET amount = $1 WHERE user_id = $2`, newCashBalance, user_id)
 	if err != nil {
 		rollbackTx(tx)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update USD balance"})
-		log.Printf("Failed to update USD balance: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cash balance"})
+		log.Printf("Failed to update cash balance: %v", err)
 		c.Abort()
 		return
 	}
-	dataSellResponse.TotalProceeds = sale_proceeds
+	dataSellResponse.TotalProceeds = saleProceeds
 
 	// Update or delete symbol holdings
-	if new_symbol_amount > 0 {
-		_, err = tx.Exec(`UPDATE assets SET quantity = $1 WHERE user_id = $2 AND symbol = $3`, new_symbol_amount, user_id, symbol)
+	if newSymbolAmount > 0 {
+		_, err = tx.Exec(`UPDATE assets SET quantity = $1 WHERE user_id = $2 AND symbol = $3`, newSymbolAmount, user_id, symbol)
 	} else {
 		_, err = tx.Exec(`DELETE FROM assets WHERE user_id = $1 AND symbol = $2`, user_id, symbol)
 	}
@@ -260,8 +279,8 @@ func SellTransactionHandle(db *sqlx.DB, user_id string, amount int, symbol strin
 		c.Abort()
 		return
 	}
-	dataSellResponse.NewUsdBalance = new_usd_balance
-	dataSellResponse.RemainingHoldings = new_symbol_amount
+	dataSellResponse.NewCashBalance = newCashBalance
+	dataSellResponse.RemainingHoldings = newSymbolAmount
 
 	// Insert transaction history
 	_, err = tx.Exec(`

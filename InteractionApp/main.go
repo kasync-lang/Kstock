@@ -25,11 +25,9 @@ func main() {
 	// Cancel both Kafka listener and HTTP server on Ctrl+C (SIGINT) or Docker stop (SIGTERM).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	server.StartServer(ctx)
-	cfgKafka := server.NewKafkaListenerConfigFromConfig(config.Cfg)
 	priceStore := dto.NewPriceStore()
-	// Add usd
-	priceStore.Update("USD", 1.0)
+	server.StartServer(ctx, priceStore)
+	cfgKafka := server.NewKafkaListenerConfigFromConfig(config.Cfg)
 
 	// Gin router
 	r := gin.Default()

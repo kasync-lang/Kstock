@@ -10,6 +10,7 @@ func RegisterAssetRoutes(router *gin.RouterGroup) {
 	assetGroup := router.Group("/assets")
 	{
 		assetGroup.GET("/", handle.GetAsset)
+		assetGroup.GET("/cash", handle.GetCashBalance)
 		assetGroup.POST("/topup", handle.Topup)
 	}
 }

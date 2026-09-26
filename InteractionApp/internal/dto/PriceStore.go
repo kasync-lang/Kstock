@@ -16,6 +16,10 @@ type Tick struct {
 	T int64    `json:"t"`
 	V int      `json:"v"`
 }
+type FirstPrice struct {
+	Symbol string  `ch:"symbol"`
+	Price  float64 `ch:"price"`
+}
 
 // Print all field
 func (t *Tick) String() string {
