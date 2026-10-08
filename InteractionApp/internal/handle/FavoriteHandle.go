@@ -34,6 +34,7 @@ func GetAllFavorite(c *gin.Context) {
 	symbols := []string{}
 	for rows.Next() {
 		var symbol string
+
 		if err := rows.Scan(&symbol); err != nil {
 			log.Println(err)
 			c.JSON(500, gin.H{"error": "Internal Server Error"})

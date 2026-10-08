@@ -55,6 +55,12 @@ func StartServer(ctx context.Context, priceStore *dto.PriceStore) {
 	} else {
 		log.Printf("Init PriceStore success")
 	}
+	if err := LoadDailyCloses(ctx, chConn, GetDailyCloseStore()); err != nil {
+		log.Printf("Init DailyCloseStore error %v", err)
+	} else {
+		log.Printf("Init DailyCloseStore success (%d symbols)", GetDailyCloseStore().Len())
+	}
+	go RunDailyCloseRefresher(ctx, chConn, GetDailyCloseStore(), DailyCloseRefreshInterval)
 }
 func InitSocket(ctx context.Context) error {
 	eventBus = ksocket.NewEventBus(1000)

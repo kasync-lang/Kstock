@@ -88,6 +88,26 @@
               "default": "name"
             },
             "description": "Sort field."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Optional maximum number of symbols to return."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Optional number of symbols to skip."
           }
         ],
         "responses": {
