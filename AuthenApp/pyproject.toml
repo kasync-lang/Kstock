@@ -69,3 +69,16 @@ dependencies = [
   "watchfiles==1.0.5",
   "websockets==15.0.1",
 ]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.3",
+  "pytest-asyncio>=0.24.0",
+  "pytest-cov>=5.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["app/test"]
+asyncio_mode = "auto"
+addopts = "-ra"
+

@@ -1,9 +1,7 @@
-import uuid
-from typing import Any, Optional
+from typing import Any
 
 from app.core.security import get_password_hash, verify_password
-from app.schema.token import Token, TokenPayload
-from app.schema.user import UserCreate, UserUpdate, Oauth2AccountBase
+from app.schema.user import UserCreate, UserUpdate
 from app.model.User import User, Oauth2Account
 
 
@@ -22,12 +20,17 @@ async def create_user(*, user_create: UserCreate) -> User:
 
 
 async def update_user(*, db_user: User, user_in: UserUpdate) -> Any:
-    user_data = user_in.model_dump(exclude={"password"})
-    if "password" in user_data:
-        user_data["hashed_password"] = get_password_hash(user_data["password"])
-    db_user.hashed_password = user_data["hashed_password"]
-    db_user.email = user_data["email"]
-    db_user.save()
+    user_data = user_in.model_dump(exclude_unset=True)
+    password = user_data.pop("password", None)
+    if password:
+        db_user.hashed_password = get_password_hash(password)
+    if "email" in user_data and user_data["email"] is not None:
+        db_user.email = user_data["email"]
+    if "full_name" in user_data:
+        db_user.full_name = user_data["full_name"]
+    if "is_actived" in user_data:
+        db_user.is_actived = user_data["is_actived"]
+    await db_user.save()
     return db_user
 
 

@@ -37,11 +37,28 @@ class InMemoryRedis:
     def __init__(self) -> None:
         self.store: dict[str, str] = {}
 
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
     async def set(self, key: str, value: str, ex: int | None = None) -> None:
         self.store[key] = value
 
+    async def delete(self, *keys: str) -> int:
+        count = 0
+        for k in keys:
+            if k in self.store:
+                del self.store[k]
+                count += 1
+        return count
+
     async def getdel(self, key: str) -> str | None:
         return self.store.pop(key, None)
+
+    async def expire(self, key: str, time: int) -> bool:
+        return key in self.store
+
+    async def exists(self, *keys: str) -> int:
+        return sum(1 for k in keys if k in self.store)
 
     async def aclose(self) -> None:
         return None
@@ -191,5 +208,3 @@ def superuser_public(superuser_account: User) -> UserPublic:
 @pytest.fixture
 def oauth_public(oauth_account: Oauth2Account) -> UserPublic:
     return to_public_user(oauth_account)
-
-

@@ -1,18 +1,19 @@
 import logging
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
+from bson.errors import InvalidId
 from app.core import crud
-from app.api.deps import get_current_active_superuser, CurrentUser
+from app.api.deps import CurrentAccount, get_current_active_superuser, CurrentUser
 from fastapi import BackgroundTasks
 from app.core.config import settings
-from app.core.crud import get_user_by_email
 from app.core.security import get_password_hash, verify_password
 from app.utils import generate_new_account_email, send_email
 from app.schema.user import UsersPublic, UserCreate, Message, UserPublic
-from app.model.User import User
+from app.model.User import Oauth2Account, User
 from app.api.deps import parse_user_db_to_currentuser
-from app.schema.user import UserUpdateMe, UpdatePassword, UserRegister, UserUpdate
+from app.schema.user import UserUpdateMe, UpdatePassword, UserUpdate
+from beanie import PydanticObjectId
 
 
 router = APIRouter(prefix="/user", tags=["user"])
@@ -36,12 +37,19 @@ async def create_user(user_in: UserCreate, backgroud_task: BackgroundTasks) -> A
             email_to = user_in.email,
             username= user_in.email, password=user_in.password,
         )
-        backgroud_task.add_task(send_email,user_in.email, email_data.subject, email_data.html_content)
+        backgroud_task.add_task(
+            send_email,
+            email_to=user_in.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
 
     logging.warning(f"New user created: {user_db.email}")
     return parse_user_db_to_currentuser(user_db)
 @router.patch("/me", response_model=UserPublic)
-async def update_user_me(*, user_in: UserUpdateMe, current_user: CurrentUser) -> Any:
+async def update_user_me(*, user_in: UserUpdateMe, current_user: CurrentUser, current_account: CurrentAccount) -> Any:
+    if isinstance(current_account, Oauth2Account):
+        raise HTTPException(status_code=400, detail="OAuth account profile is managed by its provider")
     if user_in.email:
         exiting_user = await crud.get_user_by_email(email=user_in.email)
         if exiting_user and exiting_user.id != current_user.id:
@@ -54,28 +62,26 @@ async def update_user_me(*, user_in: UserUpdateMe, current_user: CurrentUser) ->
     return parse_user_db_to_currentuser(updated_user)
 
 @router.patch("/me/password", response_model=Message)
-async def update_user_password_me(body: UpdatePassword, current_user: CurrentUser) -> Any:
-    if not verify_password(body.current_password, current_user.hashed_password):
+async def update_user_password_me(body: UpdatePassword, current_account: CurrentAccount) -> Any:
+    if isinstance(current_account, Oauth2Account):
+        raise HTTPException(status_code=400, detail="OAuth accounts do not have a local password")
+    if not verify_password(body.current_password, current_account.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect password")
     if body.current_password == body.new_password:
         raise HTTPException(status_code=400, detail="New password can not be the same current password")
     hashed_password = get_password_hash(body.new_password)
-    await User.find_one(User.id == current_user.id).update({"$set": {"hashed_password": hashed_password}})
+    await User.find_one(User.id == current_account.id).update({"$set": {"hashed_password": hashed_password}})
     return Message(message="Password updated successfully")
 @router.get("/me", response_model=UserPublic)
 def read_user_me(current_user: CurrentUser) -> Any:
     return current_user
 @router.delete("/me", response_model=Message)
-async def delete_user_me(current_user: CurrentUser) -> Any:
+async def delete_user_me(current_user: CurrentUser, current_account: CurrentAccount) -> Any:
     if current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser can not be deleted yourself")
     try:
-        user_to_delete = await get_user_by_email(email=current_user.email)
-        if user_to_delete:
-            user_to_delete.is_actived=False
-            await user_to_delete.save()
-        else:
-            raise HTTPException(status_code=404, detail="User not found in system")
+        current_account.is_actived = False
+        await current_account.save()
     except Exception as e:
         logging.error(e)
         raise HTTPException(status_code=400, detail="Something went wrong")
@@ -83,17 +89,30 @@ async def delete_user_me(current_user: CurrentUser) -> Any:
     return Message(message="User deleted successfully")
 
 @router.get("/{user_id}", response_model=UserPublic)
-def read_user_by_id(user_id: str, current_user: CurrentUser) -> Any:
-    user = User.find_one(User.id == user_id)
-    if user == current_user:
-        return user
+async def read_user_by_id(user_id: str, current_user: CurrentUser) -> Any:
+    try:
+        account_id = PydanticObjectId(user_id)
+    except (TypeError, ValueError, InvalidId):
+        raise HTTPException(status_code=404, detail="User not found in system")
+
+    user = await User.get(account_id)
+    if not user:
+        user = await Oauth2Account.get(account_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found in system")
+    if str(user.id) == current_user.id:
+        return parse_user_db_to_currentuser(user)
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Forbidden")
     return parse_user_db_to_currentuser(user)
 
 @router.patch("/{user_id}", response_model=UserPublic, dependencies=[Depends(get_current_active_superuser)])
 async def update_user(user_id: str, user_in: UserUpdate) -> Any:
-    db_user = await User.find_one(User.id == ObjectId(user_id))
+    try:
+        object_id = ObjectId(user_id)
+    except (TypeError, ValueError, InvalidId):
+        raise HTTPException(status_code=404, detail="User not found in system")
+    db_user = await User.find_one(User.id == object_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found in system")
     if user_in.email:
@@ -105,7 +124,11 @@ async def update_user(user_id: str, user_in: UserUpdate) -> Any:
 
 @router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
 async def delete_user(user_id: str, current_user: CurrentUser) -> Message:
-    user = await User.find_one(User.id == ObjectId(user_id))
+    try:
+        object_id = ObjectId(user_id)
+    except (TypeError, ValueError, InvalidId):
+        raise HTTPException(status_code=404, detail="User not found in system")
+    user = await User.find_one(User.id == object_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found in system")
     if user.id == ObjectId(current_user.id):

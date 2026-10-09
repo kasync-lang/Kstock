@@ -37,6 +37,7 @@ class UpdatePassword(BaseModel):
 
 class UserPublic(UserBase):
     id: Optional[str] = Field(default=None)
+    provider: Optional[str] = Field(default=None)
 
 
 class UsersPublic(BaseModel):

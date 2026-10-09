@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import timedelta
 
 import jwt
@@ -34,3 +35,16 @@ def test_is_strong_password_accepts_valid_password() -> None:
 def test_is_strong_password_rejects_weak_password() -> None:
     assert security.is_strong_password("weakpass") is False
 
+
+def test_hash_token_produces_sha256() -> None:
+    raw_token = "some-random-opaque-token"
+    expected = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    assert security.hash_token(raw_token) == expected
+
+
+def test_generate_opaque_token_returns_unique_strings() -> None:
+    token1 = security.generate_opaque_token()
+    token2 = security.generate_opaque_token()
+    assert isinstance(token1, str)
+    assert len(token1) >= 32
+    assert token1 != token2

@@ -1,10 +1,12 @@
+import hashlib
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
-import jwt
 import bcrypt
+import jwt
 from app.core.config import KeyStore
 from app.core.config import settings
-import re
 
 ALGORITHM = settings.ALGORITHM
 
@@ -34,3 +36,13 @@ def get_password_hash(password: str) -> str:
 def is_strong_password(plain_password: str) -> bool:
     pattern = r'^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*\W)(?!.* ).{8,}$'
     return bool(re.match(pattern, plain_password))
+
+
+def hash_token(token: str) -> str:
+    """Computes SHA-256 hash of an opaque token."""
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def generate_opaque_token() -> str:
+    """Generates a secure random URL-safe opaque token."""
+    return secrets.token_urlsafe(32)

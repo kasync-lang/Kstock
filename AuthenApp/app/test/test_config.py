@@ -58,6 +58,11 @@ def test_setting_computed_fields_and_email_flag() -> None:
         "http://frontend.local",
     ]
     assert settings.emails_enabled is True
+    assert settings.REFRESH_TOKEN_EXPIRE_DAYS == 7
+    assert settings.REFRESH_TOKEN_COOKIE_NAME == "refresh_token"
+    assert settings.REFRESH_TOKEN_COOKIE_SECURE is False
+    assert settings.REFRESH_TOKEN_COOKIE_SAMESITE == "lax"
+    assert settings.REFRESH_TOKEN_COOKIE_PATH == "/"
 
 
 def test_setting_rejects_default_superuser_password_in_prod() -> None:
@@ -74,5 +79,3 @@ def test_setting_rejects_default_superuser_password_in_prod() -> None:
             ALGORITHM="RS256",
             ACCESS_TOKEN_EXPIRE_MINUTES=30,
         )
-
-

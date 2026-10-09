@@ -1,22 +1,17 @@
 import logging
 from typing import Annotated
 import jwt
+from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
-from markdown_it.rules_inline.state_inline import Delimiter
 from pydantic import ValidationError
-from app.core import security
-from app.core import db
-import os
-from app.model.User import User
-from app.schema.token import Token, TokenPayload
+from app.model.User import Oauth2Account, User
+from app.schema.token import TokenPayload
 from beanie import PydanticObjectId
 from app.schema.user import UserPublic
 from app.core.config import KeyStore
-from app.schema.user import UserBase
 from app.core.config import settings
-import logging
 reuseable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.PREFIX_API}/login/access-token",
 )
@@ -32,7 +27,7 @@ def get_redis(request: Request):
 
 
 
-async def get_current_user(token:TokenDep) -> User:
+async def get_current_user(token:TokenDep) -> User | Oauth2Account:
     try:
         payload  = jwt.decode(
             token,key = KeyStore.public_key,
@@ -46,7 +41,17 @@ async def get_current_user(token:TokenDep) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = await User.get(PydanticObjectId(token_data.sub))
+    try:
+        account_id = PydanticObjectId(token_data.sub)
+    except (TypeError, ValueError, InvalidId):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+
+    user = await User.get(account_id)
+    if not user:
+        user = await Oauth2Account.get(account_id)
 
     if not user:
         raise HTTPException(
@@ -61,10 +66,16 @@ async def get_current_user(token:TokenDep) -> User:
 def parse_user_db_to_currentuser(user=Depends(get_current_user)):
     user_dict = dict(user)
     user_dict["id"] = str(user_dict["id"])
-    user_dict["is_superuser"] = True if user_dict['role'] == 'admin' else False
+    if isinstance(user, Oauth2Account):
+        user_dict["full_name"] = user_dict.get("name")
+        user_dict["provider"] = getattr(user, "provider", "google")
+    else:
+        user_dict["provider"] = None
+    user_dict["is_superuser"] = user_dict.get("role") == "admin"
     return UserPublic(**user_dict)
 
 CurrentUser = Annotated[UserPublic, Depends(parse_user_db_to_currentuser)]
+CurrentAccount = Annotated[User | Oauth2Account, Depends(get_current_user)]
 
 def get_current_active_superuser(current_user: CurrentUser) -> CurrentUser:
     if not current_user.is_superuser:
