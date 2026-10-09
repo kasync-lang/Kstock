@@ -95,3 +95,10 @@ func GetKeystore() (*rsa.PublicKey, error) {
 	publicKeyCache = key
 	return publicKeyCache, nil
 }
+
+// ResetKeystoreCacheForTest clears the cached public key for testing purposes.
+func ResetKeystoreCacheForTest() {
+	publicKeyMu.Lock()
+	defer publicKeyMu.Unlock()
+	publicKeyCache = nil
+}

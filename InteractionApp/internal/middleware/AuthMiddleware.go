@@ -3,6 +3,7 @@ package middleware
 import (
 	"Kstock/internal/server"
 	"Kstock/pkg/jwk"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -10,35 +11,68 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type AuthErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+var (
+	ErrRespMissingToken = AuthErrorResponse{
+		Code:    "MISSING_TOKEN",
+		Message: "Bearer token is required",
+	}
+	ErrRespInvalidToken = AuthErrorResponse{
+		Code:    "INVALID_TOKEN",
+		Message: "Token is invalid",
+	}
+	ErrRespTokenExpired = AuthErrorResponse{
+		Code:    "ACCESS_TOKEN_EXPIRED",
+		Message: "Access token has expired",
+	}
+)
+
+func abortWithAuthError(c *gin.Context, resp AuthErrorResponse) {
+	c.JSON(http.StatusUnauthorized, resp)
+	c.Abort()
+}
+
+func abortWithVerifyError(c *gin.Context, err error) {
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		abortWithAuthError(c, ErrRespTokenExpired)
+		return
+	}
+	abortWithAuthError(c, ErrRespInvalidToken)
+}
+
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		auth_header := c.Request.Header.Get("Authorization")
-		if auth_header == "" {
-
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Authorization header is missing"})
-			c.Abort()
+		authHeader := strings.TrimSpace(c.Request.Header.Get("Authorization"))
+		if authHeader == "" {
+			abortWithAuthError(c, ErrRespMissingToken)
 			return
 		}
-		bearer_token := strings.Split(auth_header, " ")
-		if len(bearer_token) != 2 || bearer_token[0] != "Bearer" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Authorization header format"})
-			c.Abort()
+		bearerToken := strings.Split(authHeader, " ")
+		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" || bearerToken[1] == "" {
+			abortWithAuthError(c, ErrRespMissingToken)
 			return
 		}
-		tokenStr := bearer_token[1]
+		tokenStr := bearerToken[1]
 
 		claims, err := jwk.Verify(tokenStr)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
+			abortWithVerifyError(c, err)
 			return
 		}
 
 		TemporaryRegiterUser(claims, c)
+		if c.IsAborted() {
+			return
+		}
 		c.Set("claims", claims)
 		c.Next()
 	}
 }
+
 func TemporaryRegiterUser(claims jwt.Claims, c *gin.Context) {
 	sub, err := claims.(jwt.MapClaims).GetSubject()
 	if err != nil {
@@ -63,24 +97,21 @@ func AuthSocketMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := c.Query("token")
 		if tokenStr == "" {
-			auth_header := c.Request.Header.Get("Authorization")
-			if auth_header == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Authorization header is missing"})
-				c.Abort()
+			authHeader := strings.TrimSpace(c.Request.Header.Get("Authorization"))
+			if authHeader == "" {
+				abortWithAuthError(c, ErrRespMissingToken)
 				return
 			}
-			parts := strings.Split(auth_header, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Authorization header format"})
-				c.Abort()
+			parts := strings.Split(authHeader, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" || parts[1] == "" {
+				abortWithAuthError(c, ErrRespMissingToken)
 				return
 			}
 			tokenStr = parts[1]
 		}
 		claims, err := jwk.Verify(tokenStr)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
+			abortWithVerifyError(c, err)
 			return
 		}
 		c.Set("claims", claims)
