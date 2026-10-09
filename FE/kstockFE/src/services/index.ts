@@ -6,7 +6,16 @@
  */
 
 // Base client utilities (token helpers, etc.)
-export { getToken, setToken, removeToken, API_BASE_URL, AUTH_BASE_URL } from './api'
+export {
+  getToken,
+  setToken,
+  removeToken,
+  refreshAccessToken,
+  SESSION_EXPIRED_REASON,
+  API_BASE_URL,
+  AUTH_BASE_URL,
+  AUTH_ROOT_URL,
+} from './api'
 
 // Auth (AuthenApp)
 export * from './auth.service'
