@@ -12,7 +12,7 @@ import type {
   Order,
   BuyOrderResponse,
   SellOrderResponse,
-  OrderOperation,
+  TransactionHistoryResponse,
 } from '../types'
 
 /**
@@ -48,6 +48,19 @@ export function sellStock(
   quantity: number,
 ): Promise<SellOrderResponse> {
   return submitOrder({ symbol, quantity, operation: 'SELL' }) as Promise<SellOrderResponse>
+}
+
+/**
+ * GET /api/transactions/history?page=:page
+ *
+ * Fetch paginated transaction history for the authenticated user.
+ */
+export function getTransactionHistory(
+  page: number = 1,
+): Promise<TransactionHistoryResponse> {
+  return apiRequest<TransactionHistoryResponse>('GET', '/transactions/history', {
+    params: { page },
+  })
 }
 
 /**

@@ -26,4 +26,7 @@ type QuerySymbol struct {
 	Name    string `form:"name" binding:"omitempty" default:""`
 	Exhange string `form:"exchange" binding:"omitempty" default:"NASDAQ"`
 	OrderBy string `form:"order_by" binding:"omitempty" oneof:"name,market_cap,ipo" default:"name"`
+	// Optional pagination. Limit = 0 (omitted) means no limit, to stay backward compatible.
+	Limit  int `form:"limit" binding:"omitempty,min=0"`
+	Offset int `form:"offset" binding:"omitempty,min=0"`
 }

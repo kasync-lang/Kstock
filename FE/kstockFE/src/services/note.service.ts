@@ -4,7 +4,7 @@
  */
 
 import { apiRequest } from './api'
-import type { NoteCreate, NoteDetail, NotePublic, NoteUpdate, Message } from '../types'
+import type { NoteCreate, NoteDetail, NotePublic, NoteUpdate } from '../types'
 
 /**
  * GET /api/notes/

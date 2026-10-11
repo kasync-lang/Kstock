@@ -1,7 +1,6 @@
 package handle
 
 import (
-	"Kstock/internal/config"
 	"Kstock/internal/dto"
 	"Kstock/internal/server"
 	"fmt"
@@ -23,21 +22,27 @@ func GetSymbols(c *gin.Context) {
 	}
 	allowedOrderBy := map[string]string{
 		"name":       "name",
-		"market_cap": "market_cap",
+		"market_cap": "market_capitalization",
 		"ipo":        "ipo",
 	}
 	orderBy, ok := allowedOrderBy[query_symbol.OrderBy]
 	if !ok {
 		orderBy = "ticker"
 	}
+	args := []interface{}{strings.ToUpper(query_symbol.Name) + "%", query_symbol.Exhange + "%"}
+	limitClause := ""
+	if query_symbol.Limit > 0 {
+		limitClause = " LIMIT $3 OFFSET $4"
+		args = append(args, query_symbol.Limit, query_symbol.Offset)
+	}
 	query := fmt.Sprintf(`
 SELECT name, ticker, logo
 FROM company_profile
 WHERE (name LIKE $1 OR ticker LIKE $1)
   AND exchange LIKE $2
-ORDER BY %s
-`, orderBy)
-	row, err := db.Queryx(query, strings.ToUpper(query_symbol.Name)+"%", query_symbol.Exhange+"%")
+ORDER BY %s%s
+`, orderBy, limitClause)
+	row, err := db.Queryx(query, args...)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
@@ -60,34 +65,42 @@ ORDER BY %s
 		return
 	}
 
-	if conn_click_house != nil && config.Cfg != nil {
-		priceQuery := fmt.Sprintf(`SELECT close FROM %s.ohlcv_1d WHERE symbol = ? ORDER BY timestamp DESC LIMIT 2`, config.Cfg.ClickHouseDatabase)
-		for i := range data {
-			rows, err := conn_click_house.Query(c.Request.Context(), priceQuery, data[i].Ticker)
-			if err != nil {
-				log.Printf("get price history for %s: %v", data[i].Ticker, err)
-				continue
-			}
+	dailyStore := server.GetDailyCloseStore()
+	var priceStore *dto.PriceStore
+	if v, ok := c.Get("price_store"); ok {
+		if ps, okCast := v.(*dto.PriceStore); okCast {
+			priceStore = ps
+		}
+	}
 
-			prices := make([]float64, 0, 2)
-			for rows.Next() {
-				var price float64
-				if err := rows.Scan(&price); err != nil {
-					log.Printf("scan price history for %s: %v", data[i].Ticker, err)
-					continue
+	// Warm cache on demand if not loaded yet (e.g. cold start) and ClickHouse is available
+	if (dailyStore == nil || dailyStore.Len() == 0) && conn_click_house != nil {
+		if err := server.LoadDailyCloses(c.Request.Context(), conn_click_house, dailyStore); err != nil {
+			log.Printf("fallback load daily close cache: %v", err)
+		}
+	}
+
+	for i := range data {
+		ticker := data[i].Ticker
+		if dailyStore != nil {
+			if dc, ok := dailyStore.Get(ticker); ok {
+				if dc.HasLast {
+					data[i].LastPrice = dc.Last
 				}
-				prices = append(prices, price)
+				if dc.HasPrev && dc.Prev != 0 {
+					data[i].PercentChange = (dc.Last - dc.Prev) / dc.Prev * 100
+				}
 			}
-			if err := rows.Err(); err != nil {
-				log.Printf("iterate price history for %s: %v", data[i].Ticker, err)
-			}
-			_ = rows.Close()
+		}
 
-			if len(prices) > 0 {
-				data[i].LastPrice = prices[0]
-			}
-			if len(prices) > 1 && prices[1] != 0 {
-				data[i].PercentChange = (prices[0] - prices[1]) / prices[1] * 100
+		if priceStore != nil {
+			if livePrice, ok := priceStore.Get(ticker); ok && livePrice > 0 {
+				data[i].LastPrice = livePrice
+				if dailyStore != nil {
+					if dc, ok := dailyStore.Get(ticker); ok && dc.HasPrev && dc.Prev != 0 {
+						data[i].PercentChange = (livePrice - dc.Prev) / dc.Prev * 100
+					}
+				}
 			}
 		}
 	}

@@ -2,6 +2,7 @@
 
 export interface Token {
   access_token: string
+  session_token?: string
   token_type?: string
 }
 
@@ -11,12 +12,23 @@ export interface UserRegister {
   full_name?: string
 }
 
+export interface UserUpdateMe {
+  email: string
+  full_name: string
+}
+
+export interface UpdatePassword {
+  current_password: string
+  new_password: string
+}
+
 export interface UserPublic {
   id: string
   email: string
   full_name?: string
   is_active?: boolean
   is_superuser?: boolean
+  provider?: string | null
 }
 
 export interface NewPassword {
@@ -34,6 +46,11 @@ export interface SymbolPublic {
   ticker: string
   name: string
   logo: string
+}
+
+export interface SymbolPreview extends SymbolPublic {
+  lastPrice: number
+  percentChange: number
 }
 
 export interface SymbolBaseDetail {
@@ -96,8 +113,9 @@ export interface NoteUpdate {
 
 export interface Trigger {
   indicator: string
-  /** Operator / condition, e.g. ">" | "<" | "==" */
-  operator: string
+  /** Operator / condition, e.g. ">" | "<" | "==" | ">=" | "<=" */
+  operator?: string
+  condition?: string
   threshold: number | null
 }
 
@@ -108,9 +126,10 @@ export interface AlertCreate {
 }
 
 export interface AlertDetail {
-  id: number
+  id: number | string
   symbol: string
-  active: boolean
+  active?: boolean
+  status?: boolean
   created_at: string
   updated_at: string
   triggers: Trigger[]
@@ -129,6 +148,21 @@ export interface Asset {
 export interface AssetsResponse {
   data: Asset[]
   all_profit_and_loss: number
+  cash_balance: number
+}
+
+export interface CashBalanceResponse {
+  cash_balance: number
+}
+
+export interface TopupRequest {
+  amount: number
+}
+
+export interface TopupResponse {
+  message: string
+  amount: number
+  new_cash_balance: number
 }
 
 // ─── Transactions (InteractionApp /api/transactions) ──────────────────────────
@@ -147,7 +181,7 @@ export interface BuyOrderResponse {
   amount: number
   price: number
   total_cost: number
-  new_usd_balance: number
+  new_cash_balance: number
   new_unit_price: number
   total_holdings: number
 }
@@ -158,8 +192,26 @@ export interface SellOrderResponse {
   amount: number
   price: number
   total_proceeds: number
-  new_usd_balance: number
+  new_cash_balance: number
   remaining_holdings: number
+}
+
+export interface TransactionHistoryItem {
+  id: string
+  amount: number
+  symbol: string
+  operation: OrderOperation | string
+  price: number
+  time_transacted: string
+}
+
+export interface TransactionHistoryResponse {
+  data: TransactionHistoryItem[]
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+  has_next: boolean
 }
 
 // ─── Chart History (InteractionApp /api/chart/history) ───────────────────────

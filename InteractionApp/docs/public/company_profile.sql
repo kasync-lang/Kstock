@@ -18,3 +18,10 @@ create table company_profile
 alter table company_profile
     owner to postgres;
 
+-- Indexes for /api/symbols performance optimization
+CREATE INDEX IF NOT EXISTS idx_company_profile_exchange_name ON company_profile (exchange, name);
+CREATE INDEX IF NOT EXISTS idx_company_profile_ticker_pattern ON company_profile (ticker varchar_pattern_ops);
+CREATE INDEX IF NOT EXISTS idx_company_profile_name_pattern ON company_profile (name text_pattern_ops);
+CREATE INDEX IF NOT EXISTS idx_company_profile_market_cap ON company_profile (market_capitalization DESC NULLS LAST);
+
+

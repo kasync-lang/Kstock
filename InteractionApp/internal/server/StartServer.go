@@ -2,12 +2,13 @@ package server
 
 import (
 	"Kstock/internal/config"
+	"Kstock/internal/dto"
 	"Kstock/internal/ksocket"
-	"Kstock/pkg/jwk"
 	"context"
 	"errors"
 	"log"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/joho/godotenv"
 )
 
@@ -16,7 +17,7 @@ var (
 	manager  *ksocket.Manager
 )
 
-func StartServer(ctx context.Context) {
+func StartServer(ctx context.Context, priceStore *dto.PriceStore) {
 
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -31,12 +32,6 @@ func StartServer(ctx context.Context) {
 	}
 	log.Printf("Starting Server")
 
-	if _, err := jwk.GetKeystore(); err != nil {
-		//log.Fatal("JWT Keystore Error", err.Error())
-		log.Print("JWT Keystore Error", err.Error())
-	} else {
-		log.Printf("JWT Keystore success")
-	}
 	instance, err2 := IntiDB()
 	if err2 != nil {
 		log.Fatal("Init DB error", err2)
@@ -54,6 +49,18 @@ func StartServer(ctx context.Context) {
 	} else {
 		log.Printf("Init Socket success")
 	}
+	err = InitFristPriceStore(ctx, priceStore, chConn)
+	if err != nil {
+		log.Printf("Init PriceStore error %v %v", err, priceStore)
+	} else {
+		log.Printf("Init PriceStore success")
+	}
+	if err := LoadDailyCloses(ctx, chConn, GetDailyCloseStore()); err != nil {
+		log.Printf("Init DailyCloseStore error %v", err)
+	} else {
+		log.Printf("Init DailyCloseStore success (%d symbols)", GetDailyCloseStore().Len())
+	}
+	go RunDailyCloseRefresher(ctx, chConn, GetDailyCloseStore(), DailyCloseRefreshInterval)
 }
 func InitSocket(ctx context.Context) error {
 	eventBus = ksocket.NewEventBus(1000)
@@ -68,4 +75,23 @@ func GetEventBus() *ksocket.EventBus {
 }
 func GetManager() *ksocket.Manager {
 	return manager
+}
+func InitFristPriceStore(ctx context.Context, priceStore *dto.PriceStore, conn clickhouse.Conn) error {
+	var firstPrice []dto.FirstPrice
+	query_get_last_price := "SELECT symbol, argMax(close, timestamp) as price from ohlcv_1d group by symbol"
+	rows, err := conn.Query(ctx, query_get_last_price)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var fp dto.FirstPrice
+		if err := rows.Scan(&fp.Symbol, &fp.Price); err != nil {
+			return err
+		}
+		firstPrice = append(firstPrice, fp)
+		priceStore.Update(fp.Symbol, fp.Price)
+	}
+	priceStore.Update("USD", 1.0)
+	return nil
 }

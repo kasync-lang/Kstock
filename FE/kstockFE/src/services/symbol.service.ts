@@ -4,20 +4,21 @@
  */
 
 import { apiRequest } from './api'
-import type { QuerySymbol, SymbolPublic, SymbolBaseDetail } from '../types'
+import type { QuerySymbol, SymbolPreview, SymbolBaseDetail } from '../types'
 
 /**
  * GET /api/symbols
  *
  * Search / list symbols with optional filters.
+ * Returns enriched preview data including last price and percent change.
  *
  * @example
  * const results = await getSymbols({ name: 'AAPL', exchange: 'NASDAQ', order_by: 'name' })
  */
 export function getSymbols(
   query: QuerySymbol = {},
-): Promise<{ data: SymbolPublic[] }> {
-  return apiRequest<{ data: SymbolPublic[] }>('GET', '/symbols', {
+): Promise<{ data: SymbolPreview[] }> {
+  return apiRequest<{ data: SymbolPreview[] }>('GET', '/symbols', {
     params: query as Record<string, string | undefined>,
   })
 }

@@ -10,15 +10,20 @@ import (
 func RegisterAllRoutes(routes *gin.Engine) {
 	routes.Use(middleware.OWASPSecurityHeaders())
 	routes.Use(middleware.RateLimit(100, time.Minute))
-	//routes.Use(middleware.AuthMiddleware())
-	main_route := routes.Group("/api")
-	RegisterSymbolRoutes(main_route)
-	RegisterFavoriteRoutes(main_route)
-	RegisterNoteRoutes(main_route)
-	RegisterAlertRoutes(main_route)
-	RegisterAssetRoutes(main_route)
-	RegisterTransactionHandle(main_route)
-	RegisterSocketRoute(main_route)
-	RegisterHistoryChartRoutes(main_route)
+	mainRoute := routes.Group("/api")
+	RegisterSymbolRoutes(mainRoute)
+	RegisterHistoryChartRoutes(mainRoute)
+
+	privateRoute := mainRoute.Group("")
+	privateRoute.Use(middleware.AuthMiddleware())
+	RegisterFavoriteRoutes(privateRoute)
+	RegisterNoteRoutes(privateRoute)
+	RegisterAlertRoutes(privateRoute)
+	RegisterAssetRoutes(privateRoute)
+	RegisterTransactionHandle(privateRoute)
+
+	socketRoute := mainRoute.Group("socket")
+	socketRoute.Use(middleware.AuthSocketMiddleware())
+	RegisterSocketRoute(socketRoute)
 
 }

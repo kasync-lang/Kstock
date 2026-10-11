@@ -1,0 +1,24 @@
+# Google Cloud Project & Location Configuration
+project_id  = "your-gcp-project-id"
+region      = "asia-southeast1"       # Singapore
+zone        = "asia-southeast1-b"
+environment = "prod"
+
+# Network Configuration (3-Tier Subnets)
+vpc_name            = "kstock-vpc"
+subnet_public_cidr  = "10.10.10.0/24"
+subnet_backend_cidr = "10.10.20.0/24"
+subnet_data_cidr    = "10.10.30.0/24"
+
+# Static Internal IPs for each tier
+ingress_internal_ip = "10.10.10.10"
+backend_internal_ip = "10.10.20.10"
+data_internal_ip    = "10.10.30.10"
+
+# Compute Instance Sizing
+ingress_machine_type = "e2-small"       # 2 vCPUs (shared), 2GB RAM
+backend_machine_type = "e2-medium"      # 2 vCPUs (shared), 4GB RAM
+data_machine_type    = "e2-standard-4"  # 4 vCPUs, 16GB RAM (for ClickHouse + Kafka + Postgres + Redis)
+
+# Dedicated Persistent SSD Disk Size for Databases (GB)
+data_disk_size_gb    = 100
