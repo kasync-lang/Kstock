@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from S3client import S3Config, S3TickUploader
+from S3Uploader import S3Config, S3TickUploader
 import os
 print(os.getcwd())
 

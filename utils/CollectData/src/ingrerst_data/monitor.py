@@ -118,6 +118,107 @@ async def report(list_symbol:list[int]):
                 logger.warning("%-8s %s", symbol, reason)
         else:
             logger.info("All subscribed symbols are healthy")
+
+
+import time
+import threading
+from dataclasses import dataclass, field
+
+from rich.live import Live
+from rich.table import Table
+
+
+@dataclass
+class SocketMetrics:
+    connected: bool = False
+    messages: int = 0
+    last_message_at: float | None = None
+    messages_last_second: int = 0
+
+    # dùng để tính messages/sec
+    _previous_messages: int = field(default=0, repr=False)
+
+    def record_message(self):
+        self.messages += 1
+        self.last_message_at = time.time()
+
+    def update_rate(self):
+        self.messages_last_second = self.messages - self._previous_messages
+        self._previous_messages = self.messages
+
+
+class SocketMonitor:
+    def __init__(self, socket_count: int):
+        self.sockets = {
+            i: SocketMetrics()
+            for i in range(socket_count)
+        }
+
+        self.lock = threading.Lock()
+
+    def set_connected(self, socket_id: int, connected: bool):
+        with self.lock:
+            self.sockets[socket_id].connected = connected
+
+    def record_message(self, socket_id: int):
+        with self.lock:
+            self.sockets[socket_id].record_message()
+
+    def update_rates(self):
+        with self.lock:
+            for socket in self.sockets.values():
+                socket.update_rate()
+
+    def render(self):
+        table = Table(title="WebSocket Monitor")
+
+        table.add_column("Socket")
+        table.add_column("Status")
+        table.add_column("Messages", justify="right")
+        table.add_column("Msg/s", justify="right")
+        table.add_column("Last Message")
+        table.add_column("Silence", justify="right")
+
+        now = time.time()
+
+        with self.lock:
+            for socket_id, metrics in self.sockets.items():
+
+                if metrics.connected:
+                    status = "CONNECTED"
+                else:
+                    status = "DISCONNECTED"
+
+                if metrics.last_message_at is None:
+                    last_message = "-"
+                    silence = "-"
+                else:
+                    elapsed = now - metrics.last_message_at
+                    last_message = time.strftime(
+                        "%H:%M:%S",
+                        time.localtime(metrics.last_message_at),
+                    )
+                    silence = f"{elapsed:.1f}s"
+
+                table.add_row(
+                    str(socket_id),
+                    status,
+                    str(metrics.messages),
+                    str(metrics.messages_last_second),
+                    last_message,
+                    silence,
+                )
+
+        return table
+
+
+def monitor_loop(monitor: SocketMonitor):
+    with Live(monitor.render(), refresh_per_second=2) as live:
+        while True:
+            time.sleep(1)
+
+            monitor.update_rates()
+            live.update(monitor.render())
 if __name__ == '__main__':
     print(asyncio.run(is_market_open()))
     assert asyncio.run(is_market_open()) == True

@@ -11,6 +11,7 @@ func RegisterAlertRoutes(router *gin.RouterGroup) {
 	{
 		alertGroup.POST("/", handle.CreateAlert)
 		alertGroup.GET("/:symbol", handle.GetAlertsBySymbol)
+		alertGroup.PUT("/:alert_id", handle.UpdateAlert)
 		alertGroup.DELETE("/:alert_id", handle.DeleteAlert)
 
 	}

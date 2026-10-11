@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 
 
 def merge_files(input_dir:str, output_path:str, list_symbols):
-    batch_size = 1000  # Process records in batches to minimize RAM usage
+    batch_size = 10000  # Process records in batches to minimize RAM usage
 
     for symbol in list_symbols:
         symbol_path = os.path.join(input_dir, symbol)

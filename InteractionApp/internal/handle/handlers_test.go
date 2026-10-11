@@ -283,3 +283,144 @@ func TestResolutionHelpers(t *testing.T) {
 		t.Fatalf("interval = %q, ok=%v", interval, ok)
 	}
 }
+
+func TestCreateAlertRejectsInvalidLogic(t *testing.T) {
+	c, w := handlerContext(http.MethodPost, "/alerts", []byte(`{"symbol":"AAPL","active":true,"logic":"XOR","triggers":[{"indicator":"PRICE","operator":">","threshold":150}]}`), true)
+	CreateAlert(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid logic status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateAlertRejectsInvalidOperator(t *testing.T) {
+	c, w := handlerContext(http.MethodPost, "/alerts", []byte(`{"symbol":"AAPL","active":true,"logic":"AND","triggers":[{"indicator":"PRICE","operator":"~","threshold":150}]}`), true)
+	CreateAlert(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid operator status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateAlertStoresLogicAndTriggers(t *testing.T) {
+	mock := setupDB(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("insert into alert (user_id, symbol, status, logic) values ($1, $2, $3, $4) returning id")).
+		WithArgs("user-1", "AAPL", true, "OR").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("alert-1"))
+	insertTrigger := regexp.QuoteMeta("insert into triggeralert (alert_id, indicator, condition, value, position) values ($1, $2, $3, $4, $5)")
+	mock.ExpectExec(insertTrigger).WithArgs("alert-1", "PRICE", ">", 150.0, 0).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(insertTrigger).WithArgs("alert-1", "VOLUME", ">=", 1000000.0, 1).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	body := []byte(`{"symbol":"AAPL","active":true,"logic":"OR","triggers":[{"indicator":"PRICE","operator":">","threshold":150},{"indicator":"VOLUME","operator":">=","threshold":1000000}]}`)
+	c, w := handlerContext(http.MethodPost, "/alerts", body, true)
+	CreateAlert(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.ID != "alert-1" {
+		t.Fatalf("response=%s err=%v", w.Body, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+
+func TestGetAlertsBySymbolReturnsArrayWithLogic(t *testing.T) {
+	mock := setupDB(t)
+	row1 := []byte(`{"id":"a1","symbol":"AAPL","status":true,"logic":"AND","created_at":"t","updated_at":"t","triggers":[{"indicator":"PRICE","threshold":150,"condition":">","operator":">","position":0}]}`)
+	row2 := []byte(`{"id":"a2","symbol":"AAPL","status":false,"logic":"OR","created_at":"t","updated_at":"t","triggers":[]}`)
+	mock.ExpectQuery("SELECT json_build_object").
+		WithArgs("AAPL", "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"json_build_object"}).AddRow(row1).AddRow(row2))
+
+	c, w := handlerContext(http.MethodGet, "/alerts/AAPL", nil, true)
+	c.Params = gin.Params{{Key: "symbol", Value: "AAPL"}}
+	GetAlertsBySymbol(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get status = %d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Data []json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode failed: %v body=%s", err, w.Body.String())
+	}
+	if len(response.Data) != 2 {
+		t.Fatalf("expected 2 alerts, got %d", len(response.Data))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateAlertReplacesTriggers(t *testing.T) {
+	mock := setupDB(t)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("update alert set logic = coalesce($1, logic), status = coalesce($2, status), updated_at = now() where id = $3 and user_id = $4")).
+		WithArgs("OR", true, "alert-1", "user-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("delete from triggeralert where alert_id = $1")).
+		WithArgs("alert-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("insert into triggeralert (alert_id, indicator, condition, value, position) values ($1, $2, $3, $4, $5)")).
+		WithArgs("alert-1", "PRICE", "<", 10.0, 0).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	body := []byte(`{"active":true,"logic":"OR","triggers":[{"indicator":"PRICE","operator":"<","threshold":10}]}`)
+	c, w := handlerContext(http.MethodPut, "/alerts/alert-1", body, true)
+	c.Params = gin.Params{{Key: "alert_id", Value: "alert-1"}}
+	UpdateAlert(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateAlertNotFound(t *testing.T) {
+	mock := setupDB(t)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("update alert set logic = coalesce($1, logic), status = coalesce($2, status), updated_at = now() where id = $3 and user_id = $4")).
+		WithArgs(nil, nil, "missing", "user-1").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	c, w := handlerContext(http.MethodPut, "/alerts/missing", []byte(`{}`), true)
+	c.Params = gin.Params{{Key: "alert_id", Value: "missing"}}
+	UpdateAlert(c)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("missing alert status = %d body=%s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteAlertUsesAlertIDParam(t *testing.T) {
+	mock := setupDB(t)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("delete from triggeralert where alert_id = $1 and exists (select 1 from alert where id = $1 and user_id = $2)")).
+		WithArgs("alert-1", "user-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("delete from alert where id = $1 and user_id = $2")).
+		WithArgs("alert-1", "user-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	c, w := handlerContext(http.MethodDelete, "/alerts/alert-1", nil, true)
+	c.Params = gin.Params{{Key: "alert_id", Value: "alert-1"}}
+	DeleteAlert(c)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d body=%s", w.Code, w.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+

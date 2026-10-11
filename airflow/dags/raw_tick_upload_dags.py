@@ -13,7 +13,7 @@ import json
 from airflow.sdk import get_current_context
 import pendulum
 
-tz = pendulum.timezone("America/New_York")
+tz_US = pendulum.timezone("America/New_York")
 
 
 @dag(
@@ -24,7 +24,7 @@ tz = pendulum.timezone("America/New_York")
         "depends_on_past": False,
 
     },
-    start_date=pendulum.datetime(2025, 10, 1, tz=tz),
+    start_date=pendulum.datetime(2025, 10, 1, tz=tz_US),
     catchup=False
 
 )
@@ -42,9 +42,9 @@ def task_flow_upload_file():
         if not os.path.exists(symbol_path):
             return False
         logical_date = context['logical_date']
-        process_date = logical_date - timedelta(days=1)
-        today = logical_date.astimezone(timezone.utc).strftime("%Y-%m-%d")
-        today_path = os.path.join(symbol_path, today)
+        process_date = logical_date.subtract(days=1)
+        yesterday = process_date.astimezone(tz=tz_US).strftime("%Y-%m-%d")
+        today_path = os.path.join(symbol_path, yesterday)
         if not os.path.exists(today_path):
             return False
         return True
@@ -63,11 +63,13 @@ def task_flow_upload_file():
         batch_size = 10000
         symbol_path = os.path.join("/opt/airflow/data/raw", symbol)
         OUTPUT_PATH = "/opt/airflow/data/merged"
-        today = context['logical_date'].astimezone(timezone.utc).strftime("%Y-%m-%d")
-        today_path = os.path.join(symbol_path, today)
+        logical_date = context['logical_date']
+        process_date = logical_date.subtract(days=1)
+        yesterday = process_date.astimezone(tz=tz_US).strftime("%Y-%m-%d")
+        today_path = os.path.join(symbol_path, yesterday)
         output_dir = os.path.join(OUTPUT_PATH, symbol)
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"{today}.parquet")
+        output_file = os.path.join(output_dir, f"{yesterday}.parquet")
         part_file = glob(os.path.join(today_path, "part-*.jsonl"))
 
         writer = None
@@ -126,7 +128,8 @@ def task_flow_upload_file():
         high_price = df['p'].max() if not df.empty else None
         low_price = df['p'].min() if not df.empty else None
         context = get_current_context()
-        timestampss = context['logical_date'].astimezone(timezone.utc)
+        process_date = context['logical_date'].subtract(days=1)
+        timestampss = process_date.astimezone(tz=tz_US)
 
         aggregated_data = [df['s'].iloc[0], timestampss, open_price, high_price, low_price, close_price, volume]
 
@@ -158,7 +161,7 @@ task_flow_upload_file()
         "depends_on_past": False,
 
     },
-    start_date=pendulum.datetime(2025, 10, 1, tz=tz),
+    start_date=pendulum.datetime(2025, 10, 1, tz=tz_US),
     catchup=False
 
 )
@@ -176,9 +179,9 @@ def task_flow_upload_file_test():
         if not os.path.exists(symbol_path):
             return False
         logical_date = context['logical_date']
-        process_date = logical_date - timedelta(days=1)
-        today = logical_date.astimezone(timezone.utc).strftime("%Y-%m-%d")
-        today_path = os.path.join(symbol_path, today)
+        process_date = logical_date.subtract(days=1)
+        yesterday = process_date.astimezone(tz=tz_US).strftime("%Y-%m-%d")
+        today_path = os.path.join(symbol_path, yesterday)
         if not os.path.exists(today_path):
             return False
         return True
@@ -197,11 +200,13 @@ def task_flow_upload_file_test():
         batch_size = 10000
         symbol_path = os.path.join("/opt/airflow/data/raw", symbol)
         OUTPUT_PATH = "/opt/airflow/data/merged"
-        today = context['logical_date'].astimezone(timezone.utc).strftime("%Y-%m-%d")
-        today_path = os.path.join(symbol_path, today)
+        logical_date = context['logical_date']
+        process_date = logical_date.subtract(days=1)
+        yesterday = process_date.astimezone(tz=tz_US).strftime("%Y-%m-%d")
+        today_path = os.path.join(symbol_path, yesterday)
         output_dir = os.path.join(OUTPUT_PATH, symbol)
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, f"{today}.parquet")
+        output_file = os.path.join(output_dir, f"{yesterday}.parquet")
         part_file = glob(os.path.join(today_path, "part-*.jsonl"))
 
         writer = None
@@ -250,7 +255,6 @@ def task_flow_upload_file_test():
     @task()
     def aggregate_and_upload_to_clickhouse(output_file):
         # Placeholder for aggregation and upload logic
-        print(output_file)
         table = pq.read_table(output_file)
         df = table.to_pandas()
         # Perform aggregation (example: count records per symbol)
@@ -260,7 +264,8 @@ def task_flow_upload_file_test():
         high_price = df['p'].max() if not df.empty else None
         low_price = df['p'].min() if not df.empty else None
         context = get_current_context()
-        timestampss = context['logical_date'].astimezone(timezone.utc)
+        process_date = context['logical_date'].subtract(days=1)
+        timestampss = process_date.astimezone(tz=tz_US)
 
         aggregated_data = [df['s'].iloc[0], timestampss, open_price, high_price, low_price, close_price, volume]
 

@@ -307,6 +307,37 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [alerts]
+      summary: Update an alert
+      parameters:
+        - name: value
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Alert ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertUpdateRequest'
+      responses:
+        '200':
+          description: Alert updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Alert not found
+        '500':
+          $ref: '#/components/responses/InternalServerError'
     delete:
       tags: [alerts]
       summary: Delete an alert
@@ -654,11 +685,15 @@ components:
       properties:
         operator:
           type: string
+          enum: ['>', '<', '>=', '<=', '==', '!=']
         threshold:
           type: number
           nullable: true
         indicator:
           type: string
+        position:
+          type: integer
+          description: Zero-based display order of the condition.
     AlertCreateRequest:
       type: object
       required: [symbol, triggers]
@@ -668,6 +703,23 @@ components:
         active:
           type: boolean
           default: true
+        logic:
+          type: string
+          enum: [AND, OR]
+          default: AND
+          description: Boolean operator applied across all triggers.
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertTrigger'
+    AlertUpdateRequest:
+      type: object
+      properties:
+        active:
+          type: boolean
+        logic:
+          type: string
+          enum: [AND, OR]
         triggers:
           type: array
           items:
@@ -682,6 +734,9 @@ components:
           type: string
         status:
           type: boolean
+        logic:
+          type: string
+          enum: [AND, OR]
         created_at:
           type: string
           format: date-time
@@ -703,7 +758,9 @@ components:
       required: [data]
       properties:
         data:
-          $ref: '#/components/schemas/AlertDetail'
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertDetail'
     Asset:
       type: object
       required: [symbol, quantity, price, profit_and_loss, market_value]
