@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 from beanie import PydanticObjectId
 from fastapi import HTTPException
@@ -29,8 +30,22 @@ async def test_get_current_user_rejects_invalid_token(monkeypatch: pytest.Monkey
     with pytest.raises(HTTPException) as exc:
         await deps.get_current_user("bad-token")
 
-    assert exc.value.status_code == 403
-    assert exc.value.detail == "Could not validate credentials"
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {"code": "INVALID_TOKEN", "message": "Token is invalid"}
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_rejects_expired_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_decode(*args, **kwargs):
+        raise jwt.ExpiredSignatureError("Signature has expired")
+
+    monkeypatch.setattr(deps.jwt, "decode", fake_decode)
+
+    with pytest.raises(HTTPException) as exc:
+        await deps.get_current_user("expired-token")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {"code": "ACCESS_TOKEN_EXPIRED", "message": "Access token has expired"}
 
 
 @pytest.mark.asyncio
@@ -44,7 +59,8 @@ async def test_get_current_user_rejects_invalid_subject(monkeypatch: pytest.Monk
     with pytest.raises(HTTPException) as exc:
         await deps.get_current_user("token")
 
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {"code": "INVALID_TOKEN", "message": "Token is invalid"}
 
 
 @pytest.mark.asyncio
@@ -146,10 +162,81 @@ def test_get_current_active_superuser_returns_admin(superuser_public) -> None:
     assert deps.get_current_active_superuser(superuser_public) is superuser_public
 
 
+@pytest.mark.asyncio
+async def test_custom_oauth2_bearer_missing_token() -> None:
+    scheme = deps.CustomOAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
+    scope = {"type": "http", "headers": []}
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc:
+        await scheme(request)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {"code": "MISSING_TOKEN", "message": "Bearer token is required"}
+
+
+@pytest.mark.asyncio
+async def test_custom_oauth2_bearer_non_bearer_token() -> None:
+    scheme = deps.CustomOAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
+    scope = {"type": "http", "headers": [(b"authorization", b"Basic 123456")]}
+    request = Request(scope)
+
+    with pytest.raises(HTTPException) as exc:
+        await scheme(request)
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {"code": "MISSING_TOKEN", "message": "Bearer token is required"}
+
+
+def test_endpoint_missing_token_returns_standard_response(client) -> None:
+    response = client.post("/login/test-token")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "code": "MISSING_TOKEN",
+        "message": "Bearer token is required",
+    }
+
+
+def test_endpoint_expired_token_returns_standard_response(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_decode(*args, **kwargs):
+        raise jwt.ExpiredSignatureError("Token expired")
+
+    monkeypatch.setattr(deps.jwt, "decode", fake_decode)
+
+    response = client.post(
+        "/login/test-token",
+        headers={"Authorization": "Bearer expired.jwt.token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "code": "ACCESS_TOKEN_EXPIRED",
+        "message": "Access token has expired",
+    }
+
+
+def test_endpoint_invalid_token_returns_standard_response(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_decode(*args, **kwargs):
+        raise InvalidTokenError("Invalid token format")
+
+    monkeypatch.setattr(deps.jwt, "decode", fake_decode)
+
+    response = client.post(
+        "/login/test-token",
+        headers={"Authorization": "Bearer invalid.jwt.token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "code": "INVALID_TOKEN",
+        "message": "Token is invalid",
+    }
+
+
 async def _return_value(value):
     return value
 
 
 def _awaitable(value):
     return _return_value(value)
-

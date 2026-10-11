@@ -10,5 +10,6 @@ dependencies = [
     "logging>=0.4.9.6",
     "pandas>=2.3.3",
     "python-dotenv>=1.2.1",
+    "rich>=15.0.0",
     "websockets>=15.0.1",
 ]

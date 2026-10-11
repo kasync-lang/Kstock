@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from app.core.db import init_db
 from fastapi.templating import Jinja2Templates
 from app.api.main import api_router
+from app.api.deps import register_exception_handlers
 import redis.asyncio as redis
 
 
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     await app.state.redis.aclose()
 
 app = FastAPI(lifespan=lifespan)
+register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -48,11 +50,3 @@ app.include_router(api_router)
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     return templates.TemplateResponse(request, "index.html", {"request": request})
-
-
-
-
-
-
-
-

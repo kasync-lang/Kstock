@@ -8,12 +8,9 @@ import dotenv
 import logging
 from confluent_kafka import Producer, KafkaException
 from pathlib import Path
-from collections import defaultdict
-from datetime import datetime, timezone, time
-import time
+import threading
 logger = logging.getLogger(__name__)
 from src.ingrerst_data.monitor import *
-
 
 
 # configure basic logging so warnings/exceptions are visible
@@ -27,7 +24,7 @@ dotenv.load_dotenv(env_path, override=False)
 MAX_RETRIES = 10
 
 
-async def connect_ws(list_symbol: list[str], ws_url: str | None, socket_order=1):
+async def connect_ws(monitor: SocketMonitor,list_symbol: list[str], ws_url: str | None, socket_order=1):
     retry = 0
     if not ws_url:
         logging.error("WebSocket url not provided for socket order %s", socket_order)
@@ -44,6 +41,7 @@ async def connect_ws(list_symbol: list[str], ws_url: str | None, socket_order=1)
             ) as ws:
                 logging.info("Connected to WebSocket: %s", socket_order)
                 retry = 0
+                monitor.set_connected(socket_order, True)
                 # Subscribe to symbols
                 for symbol in list_symbol:
                     await ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
@@ -51,21 +49,26 @@ async def connect_ws(list_symbol: list[str], ws_url: str | None, socket_order=1)
                 while True:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=30)
+                        monitor.record_message(socket_order)
                         await handle_message(msg)
+
                     except asyncio.TimeoutError:
                         logging.debug("WebSocket timeout, sending ping (order=%s)", socket_order)
                         try:
                             await ws.ping()
                         except Exception:
                             logging.exception("Failed to ping WebSocket (order=%s)", socket_order)
+                            monitor.set_connected(socket_order, False)
                     except websockets.exceptions.ConnectionClosed:
                         logging.warning("Connection closed, reconnecting for socket order %s...", socket_order)
+                        monitor.set_connected(socket_order, False)
                         break
         except Exception:
             logging.exception("WebSocket crashed (order=%s), reconnecting...", socket_order)
             # reconnect with exponential backoff
             retry += 1
             wait_time = min(2 ** retry, 60)
+            monitor.set_connected(socket_order, False)
             await asyncio.sleep(wait_time)
 
 
@@ -187,22 +190,20 @@ async def main():
                         list_symbol.append(ticker)
             found = True
             break
-
     if not found:
         logging.error("list_symbol.txt not found in candidates: %s", candidates)
         raise FileNotFoundError("list_symbol.txt not found")
-
-    list_symbol.sort(key=str.lower)
-    logging.info("list_symbol: %s", list_symbol)
-
     # ensure safe slicing
+    monitor = SocketMonitor(socket_count=4)
+
+    threading.Thread(target=monitor_loop, args=(monitor,), daemon=True).start()
+    random.shuffle(list_symbol)
     await asyncio.gather(
-        connect_ws(list_symbol[:40], os.getenv("WS_URL1"), 1),
-        connect_ws(list_symbol[40:80], os.getenv("WS_URL2"), 2),
-        connect_ws(list_symbol[80:120], os.getenv("WS_URL3"), 3),
-        connect_ws(list_symbol[120:], os.getenv("WS_URL4"), 4),
+        connect_ws(monitor, list_symbol[:40], os.getenv("WS_URL1"), 0),
+        connect_ws(monitor, list_symbol[40:80], os.getenv("WS_URL2"), 1),
+        connect_ws(monitor, list_symbol[80:120], os.getenv("WS_URL3"), 2),
+        connect_ws(monitor, list_symbol[120:], os.getenv("WS_URL4"), 3),
         worker(),
-        report(list_symbol)
     )
 
 

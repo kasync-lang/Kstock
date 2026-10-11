@@ -1,15 +1,70 @@
 services:
-  interact_app:
+
+  interact_db_app:
     image: postgres:13-alpine
     container_name: db_interact
-    restart: always
+    restart: unless-stopped
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_DB=interactdb
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: interactdb
     ports:
       - 5432:5432
     volumes:
       - postges_interact_data:/var/lib/postgresql/data
+  redis:
+    image: redis:8.8-alpine
+    container_name: redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - yes
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+
+    volumes:
+      - redis_data:/data
+
+    ports:
+      - "6379:6379"
+
+
+  clickhouse_db:
+    image: clickhouse:jammy
+    container_name: clickhouse_aggregate_db
+    restart: unless-stopped
+    ports:
+      - 8123:8123
+      - 9000:9000
+    environment:
+      CLICKHOUSE_DB: aggregate_db
+      CLICKHOUSE_USER: dev
+      CLICKHOUSE_PASSWORD: dev_password
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse/
+
+  aggregate_tick_to_clickhouse:
+    image: aggregate-tick:v1
+    container_name: aggregate-tick-to-clickhouse
+    restart: unless-stopped
+    environment:
+      KAFKA_PULL_TOPIC: raw_data_trade
+      CLICKHOUSE_HOST: clickhouse_db
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: dev
+      CLICKHOUSE_PASSWORD: dev_password
+      CLICKHOUSE_DB: aggregate_db
+      KAFKA_BOOTSTRAP_SERVERS: 192.168.2.100:29092
+    depends_on:
+      - clickhouse_db
 volumes:
   postges_interact_data:
+    external: true
+  clickhouse_data:
+    external: true
+  redis_data:

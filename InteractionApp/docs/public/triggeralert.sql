@@ -4,10 +4,12 @@ create table triggeralert
         primary key,
     alert_id  uuid
         constraint trigger_alert_fk
-            references alert,
+            references alert
+                on delete cascade,
     indicator varchar(50),
     value     double precision,
-    condition varchar(1)
+    condition varchar(4),
+    position  integer default 0 not null
 );
 
 alter table triggeralert

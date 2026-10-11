@@ -20,10 +20,10 @@ class NewsRaw:
     title: str
     content: str
     url: str
+    published_at: datetime # convert từ epoch
     image_url: str | None = None
     category: str | None = None
     symbol: str = ""
-    published_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))  # convert từ epoch
     ingested_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
     raw_payload: dict[str, Any] = field(default_factory=dict)  # giữ nguyên JSON gốc
 

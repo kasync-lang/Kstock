@@ -4,12 +4,13 @@
  */
 
 import { apiRequest } from './api'
-import type { AlertCreate, AlertDetail, Message } from '../types'
+import type { AlertCreate, AlertDetail, AlertUpdate, Message } from '../types'
 
 /**
  * POST /api/alerts/
  *
- * Create a new price alert with one or more trigger conditions.
+ * Create a new price alert with one or more trigger conditions joined by a
+ * single AND/OR operator (`payload.logic`).
  * Returns the generated alert ID.
  */
 export function createAlert(payload: AlertCreate): Promise<{ id: string }> {
@@ -17,17 +18,34 @@ export function createAlert(payload: AlertCreate): Promise<{ id: string }> {
 }
 
 /**
+ * PUT /api/alerts/:alert_id
+ *
+ * Update an existing alert's active flag, AND/OR logic and/or full set of
+ * trigger conditions (`triggers` replaces the previous list when provided).
+ */
+export function updateAlert(
+  payload: AlertUpdate,
+): Promise<{ data: { id: string } }> {
+  const { id, ...body } = payload
+  return apiRequest<{ data: { id: string } }>(
+    'PUT',
+    `/alerts/${encodeURIComponent(id)}`,
+    { body },
+  )
+}
+
+/**
  * GET /api/alerts/:symbol
  *
  * Retrieve all alerts the current user has set for a given symbol.
  *
- * The server returns `{ data: <raw json> }` — the `data` field is the alert
- * object (or null when no alerts exist for that symbol).
+ * The server returns `{ data: AlertDetail[] }` — one entry per alert, each with
+ * its own `logic` (AND/OR) and ordered `triggers`.
  */
 export function getAlertsBySymbol(
   symbol: string,
-): Promise<{ data: AlertDetail | null }> {
-  return apiRequest<{ data: AlertDetail | null }>(
+): Promise<{ data: AlertDetail[] }> {
+  return apiRequest<{ data: AlertDetail[] }>(
     'GET',
     `/alerts/${encodeURIComponent(symbol.toUpperCase())}`,
   )

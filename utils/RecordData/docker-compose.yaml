@@ -1,7 +1,9 @@
 services:
   recor_dapp:
-    image: recordapp:v1
-    container_name: recor_dapp
+    build:
+        context: .
+        dockerfile: Dockerfile
+    container_name: record_tick_app
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=192.168.2.100:29092
       - KAFKA_TOPIC=raw_data_trade

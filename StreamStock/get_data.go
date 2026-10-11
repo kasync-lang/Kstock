@@ -20,8 +20,8 @@ func GetData(ctx context.Context, bus *EventBus, cfg *Config) {
 		GroupID:     cfg.KAFKAGroupID,
 		MinBytes:    10e3,
 		MaxBytes:    10e6,
-		StartOffset: kafka.LastOffset,
 	})
+
 	defer r.Close()
 
 	log.Println("Getting Data......")

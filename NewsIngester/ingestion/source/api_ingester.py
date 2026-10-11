@@ -40,7 +40,7 @@ class APIGeter:
         *,
         session: requests.Session | None = None,
         max_retries: int = 5,
-        retry_backoff_s: float = 5,
+        retry_backoff_s: float = 10,
     ) -> None:
         self._config = config or NewsApiConfig.from_env()
         self._session = session or requests.Session()

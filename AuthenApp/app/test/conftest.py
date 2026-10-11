@@ -134,6 +134,7 @@ def in_memory_redis() -> InMemoryRedis:
 @pytest.fixture
 def api_app(in_memory_redis: InMemoryRedis) -> FastAPI:
     app = FastAPI()
+    deps.register_exception_handlers(app)
     app.include_router(api_router)
     app.state.redis = in_memory_redis
     return app

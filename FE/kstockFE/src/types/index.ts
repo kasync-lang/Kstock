@@ -111,18 +111,32 @@ export interface NoteUpdate {
 
 // ─── Alerts (InteractionApp /api/alerts) ─────────────────────────────────────
 
+/** Boolean operator applied across all trigger conditions of an alert. */
+export type AlertLogic = 'AND' | 'OR'
+
 export interface Trigger {
   indicator: string
-  /** Operator / condition, e.g. ">" | "<" | "==" | ">=" | "<=" */
+  /** Operator / condition, e.g. ">" | "<" | "==" | ">=" | "<=" | "!=" */
   operator?: string
   condition?: string
   threshold: number | null
+  /** Zero-based display order of the condition. */
+  position?: number
 }
 
 export interface AlertCreate {
   symbol: string
   active: boolean
+  /** Whether all conditions (AND) or any condition (OR) must match. */
+  logic: AlertLogic
   triggers: Trigger[]
+}
+
+export interface AlertUpdate {
+  id: string
+  active?: boolean
+  logic?: AlertLogic
+  triggers?: Trigger[]
 }
 
 export interface AlertDetail {
@@ -130,6 +144,7 @@ export interface AlertDetail {
   symbol: string
   active?: boolean
   status?: boolean
+  logic?: AlertLogic
   created_at: string
   updated_at: string
   triggers: Trigger[]
