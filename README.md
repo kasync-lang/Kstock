@@ -1,27 +1,27 @@
 # Kstock: Real-Time Financial Market Platform & AI Intelligence
 
-Hệ thống phân tích và xử lý dữ liệu chứng khoán phân tán theo kiến trúc **Event-Driven**, tích hợp luồng dữ liệu thời gian thực (**Kafka → WebSocket/REST API**), lưu trữ phân tích nến **OHLCV đa khung thời gian (ClickHouse)**, mô hình học máy **XGBoost dự đoán xu hướng**, và trợ lý hỏi đáp tài chính thông minh (**Financial RAG Chatbot**).
+A distributed stock-market data and analytics platform built on an **Event-Driven** architecture. It combines a real-time market data pipeline (**Kafka → WebSocket/REST API**), multi-timeframe **OHLCV candle analytics (ClickHouse)**, an **XGBoost** trend-prediction model, and an intelligent **Financial RAG Chatbot** for financial question answering.
 
 ---
 
-## Mục lục
+## Table of Contents
 
-- [Kiến trúc hệ thống tổng quan](#kiến-trúc-hệ-thống-tổng-quan)
-- [Cấu trúc Monorepo](#cấu-trúc-monorepo)
+- [System Architecture Overview](#system-architecture-overview)
+- [Monorepo Structure](#monorepo-structure)
 - [Technology Stack](#technology-stack)
-- [Các luồng xử lý dữ liệu cốt lõi](#các-luồng-xử-lý-dữ-liệu-cốt-lõi)
+- [Core Data Processing Flows](#core-data-processing-flows)
   - [1. Real-Time Market Data Pipeline](#1-real-time-market-data-pipeline)
   - [2. OHLCV Candle Aggregation & ML Analytics](#2-ohlcv-candle-aggregation--ml-analytics)
   - [3. Financial News Ingestion & RAG Intelligence Pipeline](#3-financial-news-ingestion--rag-intelligence-pipeline)
-- [Bảo mật & Đặc tính vận hành](#bảo-mật--đặc-tính-vận-hành)
-- [Hướng dẫn triển khai (Deployment)](#hướng-dẫn-triển-khai-deployment)
-  - [Bảng ánh xạ cổng (Port Mappings)](#bảng-ánh-xạ-cổng-port-mappings)
-  - [Khởi chạy hệ thống](#khởi-chạy-hệ-thống)
+- [Security & Operational Characteristics](#security--operational-characteristics)
+- [Deployment Guide](#deployment-guide)
+  - [Port Mappings](#port-mappings)
+  - [Launching the System](#launching-the-system)
 - [License](#license)
 
 ---
 
-## Kiến trúc hệ thống tổng quan
+## System Architecture Overview
 
 ```mermaid
 flowchart TD
@@ -69,6 +69,7 @@ flowchart TD
         MONGO[("MongoDB\nUser Profiles & Credentials")]
         REDIS[("Redis\nSessions & Cache")]
         S3[("S3 / Cloudflare R2\nRaw News & Parquet Lake")]
+        QDRANT[("Qdrant Vector DB\nnews_article_chunks")]
     end
 
     AUTH --> MONGO
@@ -90,18 +91,19 @@ flowchart TD
 
         S3 -->|Raw News JSON| PROC
         PG -->|news_articles| PROC
+        PROC -->|chunk text| PG
         PROC --> EMBED
-        EMBED -->|article_chunks| PG
-        PG -.->|Context Retrieval| CHAT
+        EMBED -->|vectors + payload| QDRANT
+        QDRANT -.->|Vector Search| CHAT
         CLICKHOUSE -.->|OHLCV Features| ML
     end
 ```
 
 ---
 
-## Cấu trúc Monorepo
+## Monorepo Structure
 
-Hệ thống được tổ chức dạng monorepo với ranh giới trách nhiệm rõ ràng cho từng microservice:
+The system is organized as a monorepo with clear responsibility boundaries for each microservice:
 
 ```text
 Kstock/
@@ -109,42 +111,42 @@ Kstock/
 ├── InteractionApp/     # Core Business API & Market REST Endpoints (Go, Gin, PostgreSQL, ClickHouse)
 ├── StreamStock/        # Real-time WebSocket Gateway (Go, Gorilla WebSocket, Kafka Consumer)
 ├── FE/                 # Financial Web Dashboard (React, TypeScript, Tailwind)
-├── NewsIngester/       # Ingestion kéo tin tức tài chính Finnhub về Cloud Storage (Python, Boto3)
-├── NewsProcesing/      # NLP Pipeline: Khử trùng lặp (SimHash), Token Chunking & Vector Embeddings
-├── airflow/            # Orchestration DAGs cho Batch News Ingestion, Embedding & Tick Archival
+├── NewsIngester/       # Pulls financial news from Finnhub into Cloud Storage (Python, Boto3)
+├── NewsProcesing/      # NLP Pipeline: Dedup (SimHash), Chunking & Qdrant Vector Store
+├── airflow/            # Orchestration DAGs for Batch News Ingestion, Embedding & Tick Archival
 ├── nginx/              # Reverse Proxy & Web Application Firewall (ModSecurity Core Rule Set)
 ├── utils/
-│   ├── Aggregate/      # Engine tổng hợp nến OHLCV sub-day thời gian thực (Kafka → ClickHouse)
-│   ├── RecordData/     # Worker nén và lưu trữ raw tick (Kafka → JSONL → Parquet → S3)
-│   └── CollectData/    # Utility tools phục vụ thu thập dữ liệu thị trường
-└── infrastructure/     # Terraform IaC quản lý hạ tầng Cloud (GCP Compute, VPC, NAT, Firewalls)
+│   ├── Aggregate/      # Real-time sub-day OHLCV candle aggregation engine (Kafka → ClickHouse)
+│   ├── RecordData/     # Raw tick compression & archival worker (Kafka → JSONL → Parquet → S3)
+│   └── CollectData/    # Utility tools for market data collection
+└── infrastructure/     # Terraform IaC for Cloud infrastructure (GCP Compute, VPC, NAT, Firewalls)
 ```
 
 ---
 
 ## Technology Stack
 
-| Tầng kiến trúc | Công nghệ chính | Vai trò kỹ thuật |
-|----------------|-----------------|------------------|
-| **Frontend** | React 18, TypeScript, TailwindCSS | Giao diện dashboard theo dõi biểu đồ, tin tức và tương tác người dùng |
-| **Gateway & WAF** | Nginx LTS, OWASP ModSecurity CRS | Reverse proxy, rate limiting, SSL termination và phòng vệ OWASP Top 10 |
-| **Core Services** | Go 1.25+ (Gin, Gorilla WebSocket)<br>Python 3.12+ (FastAPI, Beanie ODM) | Xử lý nghiệp vụ REST API, streaming WebSocket độ trễ thấp, cấp phát JWT |
-| **Event Streaming** | Apache Kafka | Trục xương sống phân phối tick thị trường thời gian thực (`raw_data_trade`) |
-| **OLAP & Time-Series** | ClickHouse (`MergeTree` Engine) | Lưu trữ và truy vấn phân tích hàng tỷ nến OHLCV đa khung thời gian |
-| **Relational Database** | PostgreSQL 13 | Lưu trữ nghiệp vụ (danh mục yêu thích, cảnh báo, giao dịch) và bài báo tin tức |
-| **Document & Cache** | MongoDB, Redis (LRU 512MB) | Lưu trữ hồ sơ người dùng, quản lý Refresh Token, Session và cache tạm |
-| **Data Lake & Storage** | AWS S3 / Cloudflare R2, Apache Parquet | Lưu trữ raw tick nén dạng Parquet và raw JSON tin tức |
-| **AI / NLP & RAG** | OpenAI Embeddings, SimHash, LangChain, TikToken | Khử trùng lặp tin tức, phân mảnh ngữ nghĩa và truy vấn RAG cho Chatbot |
-| **Machine Learning** | XGBoost, Scikit-learn, Pandas (WIP) | Feature engineering từ nến OHLCV và phân loại dự đoán xu hướng thị trường |
-| **Orchestration & DevOps**| Apache Airflow, Docker Compose, Terraform, GitHub Actions | Điều phối pipeline định kỳ, đóng gói container và tự động hóa CI/CD |
+| Architecture Layer | Core Technologies | Engineering Role |
+|--------------------|-------------------|------------------|
+| **Frontend** | React 18, TypeScript, TailwindCSS | Dashboard UI for charts, news, and user interactions |
+| **Gateway & WAF** | Nginx LTS, OWASP ModSecurity CRS | Reverse proxy, rate limiting, SSL termination, and OWASP Top 10 defense |
+| **Core Services** | Go 1.25+ (Gin, Gorilla WebSocket)<br>Python 3.12+ (FastAPI, Beanie ODM) | REST API business logic, low-latency WebSocket streaming, JWT issuance |
+| **Event Streaming** | Apache Kafka | Backbone for real-time market tick distribution (`raw_data_trade`) |
+| **OLAP & Time-Series** | ClickHouse (`MergeTree` engine) | Storage and analytical queries over billions of multi-timeframe OHLCV candles |
+| **Relational Database** | PostgreSQL 13 | Business data (favorites, alerts, transactions) and news articles |
+| **Document Store & Cache** | MongoDB, Redis (LRU 512MB) | User profiles, Refresh Token management, Sessions, and transient cache |
+| **Data Lake & Storage** | AWS S3 / Cloudflare R2, Apache Parquet | Compressed Parquet raw ticks and raw news JSON |
+| **AI / NLP & RAG** | OpenAI Embeddings, Qdrant, SimHash, LangChain, TikToken | News deduplication, semantic chunking, vector storage, and RAG retrieval for the Chatbot |
+| **Machine Learning** | XGBoost, Scikit-learn, Pandas (WIP) | Feature engineering from OHLCV candles and market trend classification |
+| **Orchestration & DevOps** | Apache Airflow, Docker Compose, Terraform, GitHub Actions | Scheduled pipeline orchestration, containerization, and CI/CD automation |
 
 ---
 
-## Các luồng xử lý dữ liệu cốt lõi
+## Core Data Processing Flows
 
 ### 1. Real-Time Market Data Pipeline
 
-Luồng xử lý dữ liệu thị trường từ nguồn cấp tick trực tiếp, đảm bảo độ trễ thấp và khả năng chịu tải cao:
+Processes market data from the live tick feed with low latency and high throughput:
 
 ```mermaid
 flowchart LR
@@ -162,15 +164,15 @@ flowchart LR
     CH -->|Chart Historical Query| API
 ```
 
-- **Message Routing**: Kafka partition key theo `symbol` đảm bảo thứ tự thời gian cho từng mã cổ phiếu.
-- **WebSocket Broadcast**: Client đăng ký nhận dữ liệu theo mã (`{"type": "subscribe", "symbol": "AAPL"}`). StreamStock dùng mô hình pub/sub non-blocking với cơ chế backpressure (ring buffer 256 messages/client) để tự động ngắt các kết nối chậm mà không nghẽn toàn hệ thống.
-- **In-Memory Store**: `InteractionApp` duy trì cấu trúc `PriceStore` và `DailyCloseStore` trong RAM để phục vụ tức thì các endpoint truy vấn giá hiện tại mà không gây áp lực lên cơ sở dữ liệu.
+- **Message Routing**: The Kafka partition key is the `symbol`, guaranteeing chronological ordering per ticker.
+- **WebSocket Broadcast**: Clients subscribe per symbol (`{"type": "subscribe", "symbol": "AAPL"}`). StreamStock uses a non-blocking pub/sub model with backpressure (a 256-message ring buffer per client) to automatically drop slow connections without stalling the whole system.
+- **In-Memory Store**: `InteractionApp` keeps `PriceStore` and `DailyCloseStore` in RAM to serve current-price endpoints instantly without putting pressure on the database.
 
 ---
 
 ### 2. OHLCV Candle Aggregation & ML Analytics
 
-Pipeline tính toán và tổng hợp nến đa khung thời gian phục vụ hiển thị biểu đồ kỹ thuật và huấn luyện mô hình học máy:
+Computes and aggregates multi-timeframe candles for technical charting and machine-learning training:
 
 ```mermaid
 flowchart LR
@@ -184,17 +186,17 @@ flowchart LR
     FEAT --> ML["XGBoost Classifier 🚧\n(Trend Direction Prediction)"]
 ```
 
-- **Sub-day Aggregation**: Worker `Aggregate` liên tục tiêu thụ tick từ Kafka, dựng nến theo các cửa sổ thời gian `1m`, `5m`, `15m`, `1h` và ghi batch trực tiếp vào ClickHouse.
-- **Daily / Weekly Sync**: Nến ngày (`1d`) và nến tuần (`1w`) được đồng bộ lịch sử định kỳ thông qua Airflow DAG kết hợp cùng `yfinance`.
-- **Machine Learning (WIP)**: 
-  - Khai thác đặc trưng kỹ thuật từ ClickHouse (tỷ suất sinh lời rolling, độ biến động volatility, chỉ số xung lượng momentum, phân bố khối lượng).
-  - Huấn luyện mô hình phân loại **XGBoost** để dự đoán xu hướng giá (tăng/giảm) trong phiên giao dịch kế tiếp.
+- **Sub-day Aggregation**: The `Aggregate` worker continuously consumes ticks from Kafka, builds candles for the `1m`, `5m`, `15m`, and `1h` windows, and batch-writes them directly to ClickHouse.
+- **Daily / Weekly Sync**: Daily (`1d`) and weekly (`1w`) candles are synced periodically via an Airflow DAG combined with `yfinance`.
+- **Machine Learning (WIP)**:
+  - Extracts technical features from ClickHouse (rolling returns, volatility, momentum, volume distribution).
+  - Trains an **XGBoost** classification model to predict the price trend (up/down) of the next trading session.
 
 ---
 
 ### 3. Financial News Ingestion & RAG Intelligence Pipeline
 
-Quy trình thu thập, tinh lọc và số hóa tri thức từ tin tức tài chính phục vụ trợ lý ảo hỏi đáp (RAG):
+Collects, refines, and vectorizes knowledge from financial news to power the RAG question-answering assistant:
 
 ```mermaid
 flowchart LR
@@ -207,53 +209,70 @@ flowchart LR
     PG_Art --> Cleaner["Text Normalization\n(NFKC & Cleaning)"]
     Cleaner --> SimHash["SimHash Dedup\n(Hamming ≤ 3 + DSU)"]
     SimHash --> Chunker["Semantic Chunker\n(tiktoken ~450 tokens)"]
+    Chunker -->|chunk text| PG_Chunk[("PostgreSQL\narticle_chunks")]
     Chunker --> Embed["OpenAI Embeddings\n(text-embedding-3-small)"]
-    Embed --> PG_Chunk[("PostgreSQL / VectorDB\narticle_chunks")]
+    Embed -->|vectors + payload| QDRANT[("Qdrant\nnews_article_chunks")]
     
-    PG_Chunk -.->|Vector Search| Chat["Financial Chatbot\n(RAG QA Assistant)"]
+    PG_Chunk -.->|chunk id| QDRANT
+    QDRANT -.->|Vector Search| Chat["Financial Chatbot\n(RAG QA Assistant)"]
 ```
 
-#### Quy trình xử lý chi tiết:
-1. **Thu thập (Ingestion)**: Airflow DAG (`upload_news`) định kỳ kéo tin từ Finnhub theo từng mã cổ phiếu và lưu trữ dạng raw JSON lên S3/R2 (`news_raw/src=finnhub/<symbol>/<date>.json`).
-2. **Trích xuất nội dung**: Tải raw JSON, bóc tách toàn văn nội dung bài viết bằng `trafilatura` và `UPSERT` vào bảng `news_articles`.
-3. **Khử trùng lặp bài báo (Near-Duplicate Detection)**:
-   - Chuẩn hóa văn bản (`NFKC`), sinh mã băm ngữ nghĩa **64-bit SimHash**.
-   - Sử dụng kỹ thuật Block Partitioning để truy vấn khoảng cách Hamming cực nhanh.
-   - Gom cụm các bài viết tương tự (Hamming Distance $\le 3$) bằng cấu trúc dữ liệu **Disjoint Set Union (Union-Find)**, chỉ giữ lại bài viết xuất hiện sớm nhất.
-4. **Phân mảnh ngữ nghĩa (Token-Aware Chunking)**:
-   - Phân đoạn văn bản dựa trên cấu trúc tiêu đề (`HTMLHeaderTextSplitter`) kết hợp `RecursiveCharacterTextSplitter`.
-   - Giới hạn kích thước xấp xỉ **450 tokens** theo bảng mã `cl100k_base` của `tiktoken`.
-5. **Vector hóa & Lưu trữ**:
-   - Vector hóa từng đoạn văn bản theo batch (100 chunks) bằng mô hình `text-embedding-3-small`.
-   - Lưu trữ metadata và vector vào `article_chunks` để phục vụ truy vấn tương đồng ngữ nghĩa.
-6. **Hỏi đáp thông minh (RAG Chatbot)**:
-   - Khi người dùng đặt câu hỏi về một mã cổ phiếu, hệ thống trích xuất vector truy vấn, tìm kiếm các chunk tin tức liên quan nhất và kết hợp cùng chỉ số tài chính để sinh câu trả lời chính xác, tránh hallucination.
+#### Detailed Processing Steps:
+1. **Ingestion**: The Airflow DAG (`upload_news`) periodically pulls news from Finnhub per symbol and stores it as raw JSON on S3/R2 (`news_raw/src=finnhub/<symbol>/<date>.json`).
+2. **Content Extraction**: Downloads the raw JSON, extracts the full article body with `trafilatura`, and `UPSERT`s it into the `news_articles` table.
+3. **Near-Duplicate Detection**:
+   - Normalizes the text (`NFKC`) and generates a **64-bit SimHash** fingerprint.
+   - Uses block partitioning for extremely fast Hamming-distance lookups.
+   - Clusters similar articles (Hamming distance $\le 3$) with a **Disjoint Set Union (Union-Find)** structure, keeping only the earliest-published article.
+4. **Token-Aware Chunking**:
+   - Splits text by heading structure (`HTMLHeaderTextSplitter`) combined with `RecursiveCharacterTextSplitter`.
+   - Caps chunk size at roughly **450 tokens** using the `tiktoken` `cl100k_base` encoding.
+   - Enriches each chunk with metadata: `article_id`, `title`, `source`, `published_at`, `symbol`, `url`, `section`, `chunk_index`, `token_count`.
+5. **Relational Chunk Storage**: Persists the chunk **text** into the PostgreSQL `article_chunks` table (`article_id`, `chunk_index`, `content`, `token_count`) and returns the generated chunk ids. Existing chunks of the same articles are replaced first, so re-running the pipeline stays idempotent.
+6. **Vectorization & Vector Store**:
+   - Embeds each chunk in batches (100 chunks) with `text-embedding-3-small` (1536 dimensions).
+   - Upserts the vectors into **Qdrant** (collection `news_article_chunks`, Cosine distance).
+   - Each point is keyed by the PostgreSQL `article_chunks.id` (with a deterministic UUID fallback), so vectors can always be joined back to the relational chunk rows.
+   - The point payload mirrors the chunk metadata (`article_id`, `section`, `title`, `source`, `symbol`, `url`, `published_at`, and optionally `content`) to support filtered retrieval by symbol/article.
+   - If Qdrant is unavailable, the pipeline keeps the stored chunk text and reports a non-fatal `vector_error`; pass `--skip-vectors` to skip embeddings entirely.
+7. **Intelligent QA (RAG Chatbot)**:
+   - When a user asks about a ticker, the system embeds the query, searches the nearest chunks in Qdrant (optionally filtered by `symbol`/`article_id`), and combines them with market metrics to produce accurate, hallucination-resistant answers.
+
+#### NewsProcesing environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` (or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`) | PostgreSQL connection used to read `news_articles` and write `article_chunks` |
+| `OPENAI_API_KEY` | Generates embeddings with `text-embedding-3-small` |
+| `QDRANT_URL` | Qdrant endpoint, e.g. `http://localhost:6333` |
+| `QDRANT_API_KEY` | API key (required by Qdrant Cloud, optional for a local server) |
+| `QDRANT_COLLECTION` | Target collection name (default: `news_article_chunks`) |
 
 ---
 
-## Bảo mật & Đặc tính vận hành
+## Security & Operational Characteristics
 
 - **Asymmetric Authentication (RS256 / JWK)**:
-  - `AuthenApp` sử dụng cặp khóa bất đối xứng RSA (`private.pem` để ký JWT, `public.pem` công khai qua endpoint JWK).
-  - `InteractionApp` (Go) xác thực chữ ký token độc lập bằng public key mà không cần gọi ngược về service xác thực, loại bỏ hoàn toàn điểm nghẽn tập trung.
+  - `AuthenApp` uses an RSA asymmetric key pair (`private.pem` to sign JWTs, `public.pem` published via a JWK endpoint).
+  - `InteractionApp` (Go) verifies token signatures independently with the public key, with no callback to the auth service — eliminating a central bottleneck.
 - **Web Application Firewall (WAF)**:
-  - Tích hợp OWASP ModSecurity Core Rule Set (CRS) tại cổng Nginx.
-  - Thiết lập Paranoia Level 1, bảo vệ toàn diện chống SQL Injection, XSS, RCE và các hành vi dò quét độc hại.
-- **Quản lý phiên & Thu hồi token**:
-  - Refresh Token và Session ID được kiểm soát qua Redis với cơ chế tự động hết hạn (TTL) và thu hồi tức thì (revocation) khi người dùng đăng xuất.
+  - OWASP ModSecurity Core Rule Set (CRS) integrated at the Nginx gateway.
+  - Paranoia Level 1 for comprehensive protection against SQL Injection, XSS, RCE, and malicious scanning behavior.
+- **Session Management & Token Revocation**:
+  - Refresh Tokens and Session IDs are managed in Redis with automatic TTL expiry and instant revocation when a user logs out.
 - **High Concurrency & Low Latency**:
-  - Tận dụng `sync.RWMutex` và Goroutines trong Go để đọc/ghi dữ liệu thị trường an toàn trong bộ nhớ.
-  - Phân luồng Kafka Consumer Groups riêng biệt cho từng tác vụ: WebSocket Hub, Aggregation và Data Archival.
+  - Uses `sync.RWMutex` and goroutines in Go for safe in-memory reads/writes of market data.
+  - Separate Kafka consumer groups per task: WebSocket Hub, Aggregation, and Data Archival.
 
 ---
 
-## Hướng dẫn triển khai (Deployment)
+## Deployment Guide
 
-### Bảng ánh xạ cổng (Port Mappings)
+### Port Mappings
 
-| Thành phần | Cổng Container | Cổng Host | Chức năng |
-|------------|----------------|-----------|-----------|
-| **WAF (Nginx + ModSecurity)** | 8080 / 8443 | `80` / `443` | Cổng vào duy nhất tiếp nhận HTTP/HTTPS từ người dùng |
+| Component | Container Port | Host Port | Purpose |
+|-----------|----------------|-----------|---------|
+| **WAF (Nginx + ModSecurity)** | 8080 / 8443 | `80` / `443` | Single entry point accepting HTTP/HTTPS from users |
 | **AuthenApp** | 8000 | `8000` | FastAPI Auth & User Management |
 | **InteractionApp** | 8080 | `8080` | Core Go REST API |
 | **StreamStock** | 8080 | `8080` | WebSocket Real-time Market Data Hub |
@@ -264,45 +283,45 @@ flowchart LR
 
 ---
 
-### Khởi chạy hệ thống
+### Launching the System
 
-#### 1. Chuẩn bị môi trường
+#### 1. Prepare the Environment
 
-Đảm bảo hệ thống đã cài đặt **Docker**, **Docker Compose** và cấu hình file biến môi trường:
+Make sure **Docker** and **Docker Compose** are installed, and configure the environment files:
 
 ```bash
-# Thiết lập cấu hình biến môi trường cho các service
+# Set up the environment configuration for the services
 cp AuthenApp/.env.example AuthenApp/.env
 cp InteractionApp/.env.example InteractionApp/.env
 ```
 
-#### 2. Khởi động tầng dữ liệu (Data & Storage Layer)
+#### 2. Start the Data & Storage Layer
 
-Khởi chạy PostgreSQL, Redis, ClickHouse và service tổng hợp tick:
+Start PostgreSQL, Redis, ClickHouse, and the tick aggregation service:
 
 ```bash
 docker compose -f docker-compose.yml up -d
 ```
 
-#### 3. Khởi động tầng ứng dụng & Gateway (Application & WAF)
+#### 3. Start the Application & Gateway Layer
 
-Khởi chạy Web Application Firewall, AuthenApp và InteractionApp:
+Start the Web Application Firewall, AuthenApp, and InteractionApp:
 
 ```bash
 docker compose -f compose.auth.yaml up -d
 ```
 
-#### 4. Chạy pipeline xử lý tin tức (News NLP & Embedding)
+#### 4. Run the News Processing Pipeline (News NLP & Embedding)
 
-Thực thi pipeline xử lý tin tức cho một mã cổ phiếu cụ thể:
+Run the news processing pipeline for a specific symbol:
 
 ```bash
 cd NewsProcesing
 
-# Cài đặt dependencies (sử dụng uv hoặc pip)
+# Install dependencies (via uv or pip)
 uv sync
 
-# Chạy quy trình: Dedup → Chunk → Sinh Embedding
+# Run the flow: Dedup → Chunk → Generate Embeddings
 python pipeline.py --symbol AAPL --date 2026-10-14 --threshold 3
 ```
 
@@ -310,4 +329,4 @@ python pipeline.py --symbol AAPL --date 2026-10-14 --threshold 3
 
 ## License
 
-Dự án được phân phối theo giấy phép mã nguồn mở. Chi tiết vui lòng xem file [LICENSE](LICENSE).
+This project is distributed under an open-source license. See the [LICENSE](LICENSE) file for details.
