@@ -1,17 +1,25 @@
 services:
-
   interact_db_app:
     image: postgres:13-alpine
     container_name: db_interact
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: interactdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-interactdb}
     ports:
-      - 5432:5432
+      - "5432:5432"
     volumes:
       - postges_interact_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-interactdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - BE
+
   redis:
     image: redis:8.8-alpine
     container_name: redis
@@ -26,45 +34,71 @@ services:
       - 512mb
       - --maxmemory-policy
       - allkeys-lru
-
-    volumes:
-      - redis_data:/data
-
     ports:
       - "6379:6379"
-
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - BE
 
   clickhouse_db:
     image: clickhouse:jammy
     container_name: clickhouse_aggregate_db
     restart: unless-stopped
-    ports:
-      - 8123:8123
-      - 9000:9000
     environment:
-      CLICKHOUSE_DB: aggregate_db
-      CLICKHOUSE_USER: dev
-      CLICKHOUSE_PASSWORD: dev_password
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-aggregate_db}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dev}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev_password}
+    ports:
+      - "8123:8123"
+      - "9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse/
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - BE
 
   aggregate_tick_to_clickhouse:
+    build:
+      context: ./utils/Aggregate
+      dockerfile: Dockerfile
     image: aggregate-tick:v1
     container_name: aggregate-tick-to-clickhouse
     restart: unless-stopped
     environment:
-      KAFKA_PULL_TOPIC: raw_data_trade
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-192.168.2.100:29092}
+      KAFKA_PULL_TOPIC: ${KAFKA_PULL_TOPIC:-raw_data_trade}
       CLICKHOUSE_HOST: clickhouse_db
-      CLICKHOUSE_PORT: 8123
-      CLICKHOUSE_USER: dev
-      CLICKHOUSE_PASSWORD: dev_password
-      CLICKHOUSE_DB: aggregate_db
-      KAFKA_BOOTSTRAP_SERVERS: 192.168.2.100:29092
+      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dev}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev_password}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-aggregate_db}
     depends_on:
-      - clickhouse_db
+      clickhouse_db:
+        condition: service_healthy
+    networks:
+      - BE
+
+networks:
+  BE:
+    name: BE
+    driver: bridge
+
 volumes:
   postges_interact_data:
-    external: true
+    name: postges_interact_data
   clickhouse_data:
-    external: true
+    name: clickhouse_data
   redis_data:
+    name: redis_data
