@@ -426,8 +426,8 @@ services:
         condition: service_completed_successfully
     entrypoint: ["/bin/bash", "-c"]
     command:
-      - mkdir -p /opt/airflow/data/raw /opt/airflow/data/merged /opt/airflow/data/news
-        && chown -R ${AIRFLOW_UID:-50000}:0 /opt/airflow/logs /opt/airflow/data/raw /opt/airflow/data/merged /opt/airflow/data/news
+      - mkdir -p /opt/airflow/data/raw /opt/airflow/data/lake /opt/airflow/data/news
+        && chown -R ${AIRFLOW_UID:-50000}:0 /opt/airflow/logs /opt/airflow/data/lake /opt/airflow/data/news
         && exec /entrypoint airflow version
     environment:
       <<: *airflow-env

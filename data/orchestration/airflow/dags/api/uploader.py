@@ -62,6 +62,14 @@ class S3Uploader:
         )
         return key
 
+    def upload_file_to_key(self, local_file: str, key: str) -> str:
+        self._client.upload_file(
+            Filename=local_file,
+            Bucket=self.bucket,
+            Key=key,
+        )
+        return key
+
     def build_news_list_keys(self, news: Iterable[NewsRaw]) -> str:
         """Partitioned key layout for better browsing / lifecycle policies."""
         news_list = list(news)

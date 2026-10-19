@@ -91,7 +91,7 @@ jobs:
               "authenapp": ("authenapp", "backend/auth-service", "python", "uv run python -m pytest -q"),
               "newsingester": ("newsingester", "data/ingestion/news-ingester", "python", "uv run python -m unittest discover -s tests -v"),
               "newsprocesing": ("newsprocesing", "data/processing/news-processing", "python", "uv run python -m unittest discover -p 'test_*.py' -v"),
-              "airflow": ("airflow", "data/orchestration/airflow", "none", "python3 -m compileall -q dags"),
+              "airflow": ("airflow", "data/orchestration/airflow", "python", "python3 -m compileall -q dags && uv run --no-project --python 3.12 --with pandas --with pyarrow --with pytest python -m pytest -q tests"),
               "frontend": ("frontend", "frontend/kstockFE", "node", "npm ci && npm run build"),
               "aggregate": ("aggregate", "data/processing/ohlcv-aggregator", "python", "uv run python -m unittest discover -s tests -v"),
               "recorddata": ("recorddata", "data/ingestion/tick-recorder", "python", "uv run python -m pytest -q"),
