@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import datetime, timezone
 
@@ -67,8 +68,12 @@ class TestS3NewsUploader(unittest.TestCase):
         self.assertEqual(out_key, expected_key)
     def test_upload_one_list_symbol(self) -> None:
         # Test that symbols with special characters are cleaned in the key.
+        # Use a stubbed client so the test never reaches a real bucket.
+        client = boto3.client("s3", region_name="us-east-1")
+        stubber = Stubber(client)
+
         cfg = S3Config(bucket="kstock-bucket-dev", prefix="")
-        uploader = S3NewsUploader.from_env()  # client not used for key building
+        uploader = S3NewsUploader(cfg, s3_client=client)
 
         news1 = NewsRaw(
             id="id123",
@@ -89,9 +94,25 @@ class TestS3NewsUploader(unittest.TestCase):
             published_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
         )
         list_news = [news1, news2]
-        key = uploader.build_news_list_keys(list_news)
-        out_key = uploader.upload_list(list_news)
-        self.assertEqual(out_key, "news_raw/source=finnhub/symbol=BRK_B/date=2026-05-01.json")
+        expected_key = "news_raw/source=finnhub/symbol=BRK_B/date=2026-05-01.json"
+        self.assertEqual(uploader.build_news_list_keys(list_news), expected_key)
+
+        expected_params = {
+            "Bucket": "kstock-bucket-dev",
+            "Key": expected_key,
+            "Body": json.dumps([n.to_dict() for n in list_news]).encode("utf-8"),
+            "ContentType": "application/json",
+            "Metadata": {
+                "source": "finnhub",
+                "symbol": "BRK_B",
+                "published_at": news1.published_at.isoformat(),
+            },
+        }
+        stubber.add_response("put_object", service_response={}, expected_params=expected_params)
+        with stubber:
+            out_key = uploader.upload_list(list_news)
+
+        self.assertEqual(out_key, expected_key)
 
 
 if __name__ == "__main__":

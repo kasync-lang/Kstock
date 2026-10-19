@@ -130,3 +130,4 @@ class S3TickUploader:
 		)
 		return key
 def main():
+	pass

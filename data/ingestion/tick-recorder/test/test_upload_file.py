@@ -47,23 +47,29 @@ def test_build_key_from_local_file_strips_leading_dot_slash():
     config = S3Config(bucket="test-bucket")
     uploader = S3TickUploader(config, s3_client=MagicMock())
 
-    key = uploader.build_key_from_local_file(symbol="AAPL")
+    key = uploader.build_key_from_local_file("./data/merged/AAPL/2026-05-09.parquet")
 
     assert key == "raw_tick/src=nasdaq/merged/AAPL/2026-05-09.parquet"
-def test_upload_local_file():
-    uploader = S3TickUploader(S3Config.from_env())
-    root_path = "./data/merged"
-    symbol = "ACGL"
+def test_upload_local_file(tmp_path, monkeypatch):
+    # Fake client so the test never reaches a real bucket.
+    fake_client = MagicMock()
+    uploader = S3TickUploader(S3Config(bucket="test-bucket"), s3_client=fake_client)
     day = "2026-05-06"
+    for symbol in ("ACGL", "AAPL"):
+        symbol_dir = tmp_path / "data" / "merged" / symbol
+        symbol_dir.mkdir(parents=True)
+        (symbol_dir / f"{day}.parquet").write_bytes(b"fake parquet bytes")
+    monkeypatch.chdir(tmp_path)
+
+    root_path = "./data/merged"
     local_file = Path(f"{root_path}")
     parquet_files = sorted(local_file.rglob(f"*{day}.parquet"))
-    if not parquet_files:
-        print(f"No parquet files found in {root_path}/{symbol}")
-        return
     count_success=0
     for file_path in parquet_files:
         local_filename = str(file_path)
         key = uploader.upload_local_file(local_filename)
+        assert key.startswith("raw_tick/src=nasdaq/merged/")
         count_success += 1
 
-    assert count_success == len(parquet_files)
+    assert count_success == len(parquet_files) == 2
+    assert fake_client.upload_file.call_count == 2
