@@ -1,3 +1,4 @@
+import os
 import socket
 from confluent_kafka import Producer
 
@@ -38,9 +39,10 @@ class KafkaProducerSingleton:
         self.producer = Producer(config)
 
     @classmethod
-    def get_instance(cls, bootstrap_servers="192.168.2.100:29092"):
+    def get_instance(cls, bootstrap_servers=None):
         """Return the singleton instance (object). Access producer via .producer."""
         if cls._instance is None:
+            bootstrap_servers = bootstrap_servers or os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.2.100:29092")
             cls._instance = KafkaProducerSingleton(bootstrap_servers)
         return cls._instance
 
