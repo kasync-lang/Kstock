@@ -6,6 +6,7 @@ A distributed stock-market data and analytics platform built on an **Event-Drive
 
 ## Table of Contents
 
+- [Two Domains: Backend vs Data Engineering](#two-domains-backend-vs-data-engineering)
 - [System Architecture Overview](#system-architecture-overview)
 - [Monorepo Structure](#monorepo-structure)
 - [Technology Stack](#technology-stack)
@@ -21,6 +22,61 @@ A distributed stock-market data and analytics platform built on an **Event-Drive
 
 ---
 
+## Two Domains: Backend vs Data Engineering
+
+Kstock is split into two domains that share **storage, not code**. Each domain owns the stores it writes to; the other side only reads them through a stable contract (a Kafka message schema or a table schema).
+
+| | **Backend (Serving)** | **Data Engineering (Data Platform)** |
+|---|---|---|
+| **Purpose** | Serve users: auth, business logic, live prices | Move, clean and aggregate market & news data |
+| **Workload** | Request/response, WebSocket; latency-sensitive | Streaming workers + scheduled batch DAGs; throughput-oriented |
+| **Directory** | `backend/` | `data/` |
+| **Components** | `auth-service`, `core-api`, `stream-gateway` | `ingestion/{market-collector, tick-recorder, news-ingester}`, `processing/{ohlcv-aggregator, news-processing}`, `orchestration/airflow` |
+| **Owns (writes)** | PostgreSQL `interactdb` (users, alerts, assets, cash, transactions, notes, favorites), MongoDB, Redis | Kafka `raw_data_trade`, S3/R2 data lake, ClickHouse `aggregate_db`, PostgreSQL news DB (`news_articles`, `article_chunks`), Qdrant |
+| **Reads from the other side** | Kafka ticks (live price), ClickHouse `ohlcv_*` (charts) | — (never reads user/business data) |
+
+```mermaid
+flowchart LR
+    subgraph DE["Data Engineering — writes"]
+        direction TB
+        COL["market-collector"] --> K[("Kafka\nraw_data_trade")]
+        K --> AGG["Aggregate"]
+        K --> REC["tick-recorder"]
+        NI["news-ingester"] --> NP["news-processing"]
+        AF["Airflow"]
+    end
+
+    subgraph CONTRACT["Contract (storage)"]
+        direction TB
+        KT[["Kafka tick schema"]]
+        CH[("ClickHouse\naggregate_db.ohlcv_*")]
+        QD[("Qdrant\nnews chunks")]
+    end
+
+    subgraph BE["Backend — reads"]
+        direction TB
+        WS["stream-gateway"]
+        API["core-api"]
+        AUTH["auth-service"]
+    end
+
+    K --- KT
+    AGG --> CH
+    AF --> CH
+    NP --> QD
+    KT --> WS
+    KT --> API
+    CH --> API
+```
+
+**Rules of the boundary**
+
+1. Backend never writes to ClickHouse, S3 or Qdrant; Data Engineering never writes to `interactdb`.
+2. A schema change on a shared store (a Kafka message field, an `ohlcv_*` column) is a contract change and must stay backward compatible for the reader.
+3. No cross-domain imports: a service in one domain must be deployable without the other domain's source code.
+
+---
+
 ## System Architecture Overview
 
 ```mermaid
@@ -32,94 +88,105 @@ flowchart TD
         FE -->|HTTPS / WSS| WAF
     end
 
-    %% Core Application Services
-    subgraph CoreServices["Application Services"]
-        AUTH["AuthenApp (FastAPI)\nAuth & Identity (RS256 JWT)"]
-        API["InteractionApp (Go / Gin)\nCore Business & Market REST API"]
-        WS["StreamStock (Go)\nReal-time WebSocket Hub"]
+    %% ===== Backend domain =====
+    subgraph Backend["BACKEND — Serving Layer"]
+        AUTH["auth-service (FastAPI)\nAuth & Identity (RS256 JWT)"]
+        API["core-api (Go / Gin)\nCore Business & Market REST API"]
+        WS["stream-gateway (Go)\nReal-time WebSocket Hub"]
+        MONGO[("MongoDB\nUser Profiles & Credentials")]
+        REDIS[("Redis\nSessions & Cache")]
+        PG[("PostgreSQL interactdb\nAlerts • Assets • Transactions")]
+        AUTH --> MONGO
+        AUTH --> REDIS
+        API --> PG
+        API --> REDIS
     end
 
     WAF -->|/auth| AUTH
     WAF -->|/api| API
     WAF -->|/ws| WS
 
-    %% Ingestion & Streaming Backbone
-    subgraph MessagingIngest["Event Streaming & Ingestion Backbone"]
-        FEED["Market Trade Feed\n(Live Ticks)"]
-        FINN["Finnhub API\n(Financial News)"]
-        YF["yfinance\n(Daily OHLCV)"]
+    %% ===== Data Engineering domain =====
+    subgraph DataPlatform["DATA ENGINEERING — Data Platform"]
+        subgraph Ingest["Ingestion"]
+            FEED["Market Trade Feed\n(Live Ticks)"]
+            COL["market-collector"]
+            FINN["Finnhub API"]
+            NI["news-ingester"]
+            YF["yfinance\n(Daily OHLCV)"]
+        end
+
         KAFKA[("Apache Kafka\ntopic: raw_data_trade")]
-        AIRFLOW["Airflow Orchestrator\nETL & Batch DAGs"]
-        
-        FEED -->|Raw Ticks| KAFKA
-        FINN -->|News Ingestion| AIRFLOW
-        YF -->|Daily Bars| AIRFLOW
+
+        subgraph Process["Processing"]
+            AGG["Aggregate Worker\n(Candle Builder)"]
+            REC["tick-recorder Worker\n(Parquet Converter)"]
+            PROC["news-processing\nSimHash Dedup • Chunking • Embedding"]
+        end
+
+        AIRFLOW["Airflow\nBatch DAGs"]
+
+        subgraph Stores["Analytical Stores"]
+            CLICKHOUSE[("ClickHouse\naggregate_db: ohlcv_1m..1w")]
+            S3[("S3 / Cloudflare R2\nRaw News & Parquet Lake")]
+            QDRANT[("Qdrant\nnews_article_chunks")]
+            PGNEWS[("PostgreSQL news DB\nnews_articles • article_chunks")]
+        end
+
+        FEED --> COL -->|Raw Ticks| KAFKA
+        KAFKA --> AGG --> CLICKHOUSE
+        KAFKA --> REC --> S3
+        FINN --> NI --> S3
+        YF --> AIRFLOW --> CLICKHOUSE
+        AIRFLOW -.->|schedules| NI
+        AIRFLOW -.->|schedules| PROC
+        S3 -->|Raw News JSON| PROC -->|vectors| QDRANT
+        PGNEWS <-->|articles / chunk text| PROC
     end
 
-    %% Realtime Consumers
-    KAFKA -->|Tick Broadcast| WS
-    KAFKA -->|In-Memory PriceStore| API
-    KAFKA -->|Tick Stream| AGG["Aggregate Worker\n(Candle Builder)"]
-    KAFKA -->|Tick Archival| REC["RecordData Worker\n(Parquet Converter)"]
+    %% ===== Contract: Backend reads Data Platform outputs =====
+    KAFKA ==>|Tick Broadcast| WS
+    KAFKA ==>|In-Memory PriceStore| API
+    CLICKHOUSE ==>|OHLCV queries| API
 
-    %% Persistence Layer
-    subgraph StorageLayer["Data & Persistence Layer"]
-        CLICKHOUSE[("ClickHouse OLAP\naggregate_db: ohlcv_1m..1d")]
-        PG[("PostgreSQL\nBusiness & News DB")]
-        MONGO[("MongoDB\nUser Profiles & Credentials")]
-        REDIS[("Redis\nSessions & Cache")]
-        S3[("S3 / Cloudflare R2\nRaw News & Parquet Lake")]
-        QDRANT[("Qdrant Vector DB\nnews_article_chunks")]
-    end
-
-    AUTH --> MONGO
-    AUTH --> REDIS
-    API --> PG
-    API --> REDIS
-    API --> CLICKHOUSE
-    AGG --> CLICKHOUSE
-    REC --> S3
-    AIRFLOW --> S3
-    AIRFLOW --> CLICKHOUSE
-
-    %% AI & Analytics Layer
-    subgraph AILayer["AI & Analytics Engines"]
-        PROC["News Processing Engine\nSimHash Dedup • Token Chunking"]
-        EMBED["Vector Embeddings\nOpenAI text-embedding-3-small"]
-        CHAT["Financial QA Assistant\n(RAG Chatbot)"]
-        ML["Analytics & ML (WIP)\nXGBoost Trend Prediction"]
-
-        S3 -->|Raw News JSON| PROC
-        PG -->|news_articles| PROC
-        PROC -->|chunk text| PG
-        PROC --> EMBED
-        EMBED -->|vectors + payload| QDRANT
-        QDRANT -.->|Vector Search| CHAT
-        CLICKHOUSE -.->|OHLCV Features| ML
-    end
+    %% AI consumers (WIP)
+    QDRANT -.->|Vector Search| CHAT["Financial QA Assistant\n(RAG Chatbot, WIP)"]
+    CLICKHOUSE -.->|OHLCV Features| ML["XGBoost Trend Prediction\n(WIP)"]
 ```
+
+Bold arrows (`==>`) mark the only points where the Backend depends on the Data Platform.
 
 ---
 
 ## Monorepo Structure
 
-The system is organized as a monorepo with clear responsibility boundaries for each microservice:
+Top-level directories map one-to-one to the domains above:
 
 ```text
 Kstock/
-├── AuthenApp/          # Identity Provider & User Auth (FastAPI, RS256 JWT, OAuth2, MongoDB, Redis)
-├── InteractionApp/     # Core Business API & Market REST Endpoints (Go, Gin, PostgreSQL, ClickHouse)
-├── StreamStock/        # Real-time WebSocket Gateway (Go, Gorilla WebSocket, Kafka Consumer)
-├── FE/                 # Financial Web Dashboard (React, TypeScript, Tailwind)
-├── NewsIngester/       # Pulls financial news from Finnhub into Cloud Storage (Python, Boto3)
-├── NewsProcesing/      # NLP Pipeline: Dedup (SimHash), Chunking & Qdrant Vector Store
-├── airflow/            # Orchestration DAGs for Batch News Ingestion, Embedding & Tick Archival
-├── nginx/              # Reverse Proxy & Web Application Firewall (ModSecurity Core Rule Set)
-├── utils/
-│   ├── Aggregate/      # Real-time sub-day OHLCV candle aggregation engine (Kafka → ClickHouse)
-│   ├── RecordData/     # Raw tick compression & archival worker (Kafka → JSONL → Parquet → S3)
-│   └── CollectData/    # Utility tools for market data collection
-└── infrastructure/     # Terraform IaC for Cloud infrastructure (GCP Compute, VPC, NAT, Firewalls)
+├── backend/                    # BACKEND — serving layer
+│   ├── auth-service/           # Identity Provider & User Auth (FastAPI, RS256 JWT, OAuth2, MongoDB, Redis)
+│   ├── core-api/               # Core Business API & Market REST Endpoints (Go, Gin, PostgreSQL, ClickHouse read)
+│   └── stream-gateway/         # Real-time WebSocket Gateway (Go, Gorilla WebSocket, Kafka consumer)
+│
+├── data/                       # DATA ENGINEERING — data platform
+│   ├── ingestion/
+│   │   ├── market-collector/   # Market tick collector → Kafka
+│   │   ├── tick-recorder/      # Raw tick archival (Kafka → JSONL → Parquet → S3)
+│   │   └── news-ingester/      # Financial news from Finnhub → S3
+│   ├── processing/
+│   │   ├── ohlcv-aggregator/   # Sub-day OHLCV candle builder (Kafka → ClickHouse)
+│   │   └── news-processing/    # Dedup (SimHash), chunking, embeddings → Qdrant
+│   └── orchestration/
+│       └── airflow/            # Batch DAGs (news, embedding, tick archival, ClickHouse load)
+│
+├── frontend/                   # Financial Web Dashboard (React, TypeScript, Tailwind)
+├── platform/
+│   ├── nginx/                  # Reverse Proxy & WAF (ModSecurity Core Rule Set)
+│   └── infrastructure/         # Terraform IaC (GCP Compute, VPC, NAT, Firewalls)
+│
+├── docker-compose.yml          # Storage layer + OHLCV aggregator
+└── compose.auth.yaml           # Gateway + auth-service + core-api (local, git-ignored)
 ```
 
 ---
@@ -152,10 +219,10 @@ Processes market data from the live tick feed with low latency and high throughp
 flowchart LR
     Feed["Market Trade Feed\n(Live Ticks)"] -->|Raw ticks| Kafka["Kafka: raw_data_trade"]
     
-    Kafka -->|Pub/Sub| WS["StreamStock\n(WebSocket Hub)"]
-    Kafka -->|In-memory Sync| API["InteractionApp\n(PriceStore)"]
+    Kafka -->|Pub/Sub| WS["stream-gateway\n(WebSocket Hub)"]
+    Kafka -->|In-memory Sync| API["core-api\n(PriceStore)"]
     Kafka -->|Batch Aggregate| Agg["Aggregate Service"]
-    Kafka -->|Tick Archival| Rec["RecordData Worker"]
+    Kafka -->|Tick Archival| Rec["tick-recorder Worker"]
 
     WS -->|Broadcast per Symbol| Clients["Connected Clients\n(Browser/FE)"]
     Agg -->|1m, 5m, 15m, 1h Candles| CH[("ClickHouse OLAP")]
@@ -165,8 +232,8 @@ flowchart LR
 ```
 
 - **Message Routing**: The Kafka partition key is the `symbol`, guaranteeing chronological ordering per ticker.
-- **WebSocket Broadcast**: Clients subscribe per symbol (`{"type": "subscribe", "symbol": "AAPL"}`). StreamStock uses a non-blocking pub/sub model with backpressure (a 256-message ring buffer per client) to automatically drop slow connections without stalling the whole system.
-- **In-Memory Store**: `InteractionApp` keeps `PriceStore` and `DailyCloseStore` in RAM to serve current-price endpoints instantly without putting pressure on the database.
+- **WebSocket Broadcast**: Clients subscribe per symbol (`{"type": "subscribe", "symbol": "AAPL"}`). stream-gateway uses a non-blocking pub/sub model with backpressure (a 256-message ring buffer per client) to automatically drop slow connections without stalling the whole system.
+- **In-Memory Store**: `core-api` keeps `PriceStore` and `DailyCloseStore` in RAM to serve current-price endpoints instantly without putting pressure on the database.
 
 ---
 
@@ -181,7 +248,7 @@ flowchart LR
     
     YF["yfinance Loader\n(Airflow DAG)"] -->|Daily & Weekly Bars\n1d, 1w| CH
     
-    CH --> API["InteractionApp\n(Chart REST API)"]
+    CH --> API["core-api\n(Chart REST API)"]
     CH --> FEAT["Feature Engineering\n(Returns, Volatility, Momentum)"]
     FEAT --> ML["XGBoost Classifier 🚧\n(Trend Direction Prediction)"]
 ```
@@ -200,7 +267,7 @@ Collects, refines, and vectorizes knowledge from financial news to power the RAG
 
 ```mermaid
 flowchart LR
-    Finn["Finnhub API\n(Company News)"] --> Ingest["NewsIngester /\nAirflow DAG"]
+    Finn["Finnhub API\n(Company News)"] --> Ingest["news-ingester /\nAirflow DAG"]
     Ingest -->|Raw JSON| S3[("S3 / R2 Object Storage\nnews_raw/src=finnhub/...")]
     
     S3 --> Crawl["Content Crawler\n(Trafilatura HTML Extraction)"]
@@ -238,7 +305,7 @@ flowchart LR
 7. **Intelligent QA (RAG Chatbot)**:
    - When a user asks about a ticker, the system embeds the query, searches the nearest chunks in Qdrant (optionally filtered by `symbol`/`article_id`), and combines them with market metrics to produce accurate, hallucination-resistant answers.
 
-#### NewsProcesing environment variables
+#### news-processing environment variables
 
 | Variable | Purpose |
 |----------|---------|
@@ -253,8 +320,8 @@ flowchart LR
 ## Security & Operational Characteristics
 
 - **Asymmetric Authentication (RS256 / JWK)**:
-  - `AuthenApp` uses an RSA asymmetric key pair (`private.pem` to sign JWTs, `public.pem` published via a JWK endpoint).
-  - `InteractionApp` (Go) verifies token signatures independently with the public key, with no callback to the auth service — eliminating a central bottleneck.
+  - `auth-service` uses an RSA asymmetric key pair (`private.pem` to sign JWTs, `public.pem` published via a JWK endpoint).
+  - `core-api` (Go) verifies token signatures independently with the public key, with no callback to the auth service — eliminating a central bottleneck.
 - **Web Application Firewall (WAF)**:
   - OWASP ModSecurity Core Rule Set (CRS) integrated at the Nginx gateway.
   - Paranoia Level 1 for comprehensive protection against SQL Injection, XSS, RCE, and malicious scanning behavior.
@@ -273,9 +340,9 @@ flowchart LR
 | Component | Container Port | Host Port | Purpose |
 |-----------|----------------|-----------|---------|
 | **WAF (Nginx + ModSecurity)** | 8080 / 8443 | `80` / `443` | Single entry point accepting HTTP/HTTPS from users |
-| **AuthenApp** | 8000 | `8000` | FastAPI Auth & User Management |
-| **InteractionApp** | 8080 | `8080` | Core Go REST API |
-| **StreamStock** | 8080 | `8080` | WebSocket Real-time Market Data Hub |
+| **auth-service** | 8000 | `8000` | FastAPI Auth & User Management |
+| **core-api** | 8080 | `8080` | Core Go REST API |
+| **stream-gateway** | 8080 | `8080` | WebSocket Real-time Market Data Hub |
 | **PostgreSQL** | 5432 | `5432` | Relational Business & News Database |
 | **Redis** | 6379 | `6379` | Token Session & In-memory Cache |
 | **ClickHouse** | 8123 / 9000 | `8123` / `9000` | HTTP Interface & Native TCP Client |
@@ -291,8 +358,8 @@ Make sure **Docker** and **Docker Compose** are installed, and configure the env
 
 ```bash
 # Set up the environment configuration for the services
-cp AuthenApp/.env.example AuthenApp/.env
-cp InteractionApp/.env.example InteractionApp/.env
+cp backend/auth-service/.env.example backend/auth-service/.env
+cp backend/core-api/.env.example backend/core-api/.env
 ```
 
 #### 2. Start the Data & Storage Layer
@@ -305,7 +372,7 @@ docker compose -f docker-compose.yml up -d
 
 #### 3. Start the Application & Gateway Layer
 
-Start the Web Application Firewall, AuthenApp, and InteractionApp:
+Start the Web Application Firewall, auth-service, and core-api:
 
 ```bash
 docker compose -f compose.auth.yaml up -d
@@ -316,7 +383,7 @@ docker compose -f compose.auth.yaml up -d
 Run the news processing pipeline for a specific symbol:
 
 ```bash
-cd NewsProcesing
+cd data/processing/news-processing
 
 # Install dependencies (via uv or pip)
 uv sync

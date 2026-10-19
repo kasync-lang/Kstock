@@ -2,11 +2,11 @@
 """Download a news JSON object from S3 (or any S3-compatible store) to local disk.
 
 The script mirrors the S3 object layout on disk. The layout used by the news
-uploader (see ``airflow/dags/api/uploader.py``) is::
+uploader (see ``data/orchestration/airflow/dags/api/uploader.py``) is::
 
     news_raw/src=finnhub/AAPL/2026-10-04.json
 
-By default the downloaded file is written under the ``NewsProcesing`` folder
+By default the downloaded file is written under the ``news-processing`` folder
 (the folder that contains this script) using the same relative path as the S3
 key. You can override the location with ``--output`` (an exact file path or a
 directory) or ``--output-root`` (a base directory).
@@ -18,7 +18,7 @@ variables (``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCESS_KEY`` /
 
 Examples
 --------
-Fetch one symbol/date into the default NewsProcesing layout::
+Fetch one symbol/date into the default news-processing layout::
 
     python fetch_news_s3.py \
         --bucket kstock-bucket-dev \
@@ -27,7 +27,7 @@ Fetch one symbol/date into the default NewsProcesing layout::
         --secret-access-key "$AWS_SECRET_ACCESS_KEY" \
         --symbol AAPL --date 2026-10-04
 
-  -> writes NewsProcesing/news_raw/src=finnhub/AAPL/2026-10-04.json
+  -> writes data/processing/news-processing/news_raw/src=finnhub/AAPL/2026-10-04.json
 
 Write to an explicit file (or into an explicit directory)::
 
@@ -60,7 +60,7 @@ logger = logging.getLogger("fetch_news_s3")
 
 DEFAULT_BASE_PREFIX = "news_raw"
 DEFAULT_SOURCE = "finnhub"
-# The folder that contains this script == the NewsProcesing folder.
+# The folder that contains this script == the news-processing folder.
 DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent
 DOWNLOAD_CHUNK_SIZE = 8 * 1024 * 1024  # 8 MiB
 
@@ -124,7 +124,7 @@ def resolve_output_path(
       treated as a directory; the S3 key is appended to it.
     * ``output`` as anything else is treated as the exact file path.
     * When ``output`` is not given, ``output_root`` (default: the
-      NewsProcesing folder) is used as the base and the full S3 key is appended.
+      news-processing folder) is used as the base and the full S3 key is appended.
     """
 
     if output:

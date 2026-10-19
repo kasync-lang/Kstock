@@ -9,7 +9,7 @@ Today all conditions are stored flat in `triggeralert` with **no column expressi
 
 ## [Types]
 
-### Go DTO — `InteractionApp/internal/dto/Alert.go`
+### Go DTO — `backend/core-api/internal/dto/Alert.go`
 ```go
 package dto
 
@@ -52,7 +52,7 @@ type AlertUpdate struct {
 }
 ```
 
-### TypeScript — `FE/kstockFE/src/types/index.ts`
+### TypeScript — `frontend/kstockFE/src/types/index.ts`
 ```ts
 export type AlertLogic = 'AND' | 'OR'
 
@@ -98,7 +98,7 @@ export interface AlertDetail {
 
 ## [Files]
 New:
-- `InteractionApp/docs/public/migrations/20260110_alert_logic_and_fixes.sql`
+- `backend/core-api/docs/public/migrations/20260110_alert_logic_and_fixes.sql`
 
 Modified (backend): `internal/dto/Alert.go`, `internal/handle/AlertHandle.go`, `internal/api/AlertRoute.go`, `internal/handle/handlers_test.go`.
 Modified (schema dumps): `docs/public/alert.sql`, `docs/public/triggeralert.sql`.

@@ -47,29 +47,29 @@ jobs:
         with:
           filters: |
             interactionapp:
-              - 'InteractionApp/**'
+              - 'backend/core-api/**'
             streamstock:
-              - 'StreamStock/**'
+              - 'backend/stream-gateway/**'
             authenapp:
-              - 'AuthenApp/**'
+              - 'backend/auth-service/**'
             newsingester:
-              - 'NewsIngester/**'
+              - 'data/ingestion/news-ingester/**'
             newsprocesing:
-              - 'NewsProcesing/**'
+              - 'data/processing/news-processing/**'
             airflow:
-              - 'airflow/**'
+              - 'data/orchestration/airflow/**'
             frontend:
-              - 'FE/**'
+              - 'frontend/**'
             aggregate:
-              - 'utils/Aggregate/**'
+              - 'data/processing/ohlcv-aggregator/**'
             recorddata:
-              - 'utils/RecordData/**'
+              - 'data/ingestion/tick-recorder/**'
             collectdata:
-              - 'utils/CollectData/**'
+              - 'data/ingestion/market-collector/**'
             nginx:
-              - 'nginx/**'
+              - 'platform/nginx/**'
             infrastructure:
-              - 'infrastructure/**'
+              - 'platform/infrastructure/**'
             ci:
               - '.github/workflows/ci.yml'
 
@@ -86,18 +86,18 @@ jobs:
           # key -> (job name, folder, language, test command)
           # language: go | python | node | terraform | none
           COMPONENTS = {
-              "interactionapp": ("interactionapp", "InteractionApp", "go", "go test ./..."),
-              "streamstock": ("streamstock", "StreamStock", "go", "go test ./..."),
-              "authenapp": ("authenapp", "AuthenApp", "python", "uv run python -m pytest -q"),
-              "newsingester": ("newsingester", "NewsIngester", "python", "uv run python -m unittest discover -s tests -v"),
-              "newsprocesing": ("newsprocesing", "NewsProcesing", "python", "uv run python -m unittest discover -p 'test_*.py' -v"),
-              "airflow": ("airflow", "airflow", "none", "python3 -m compileall -q dags"),
-              "frontend": ("frontend", "FE/kstockFE", "node", "npm ci && npm run build"),
-              "aggregate": ("aggregate", "utils/Aggregate", "python", "uv run python -m unittest discover -s tests -v"),
-              "recorddata": ("recorddata", "utils/RecordData", "python", "uv run python -m pytest -q"),
-              "collectdata": ("collectdata", "utils/CollectData", "python", ""),
-              "nginx": ("nginx", "nginx", "none", "docker compose -f docker-compose.yaml config -q"),
-              "infrastructure": ("infrastructure", "infrastructure", "terraform", "terraform fmt -check -recursive"),
+              "interactionapp": ("interactionapp", "backend/core-api", "go", "go test ./..."),
+              "streamstock": ("streamstock", "backend/stream-gateway", "go", "go test ./..."),
+              "authenapp": ("authenapp", "backend/auth-service", "python", "uv run python -m pytest -q"),
+              "newsingester": ("newsingester", "data/ingestion/news-ingester", "python", "uv run python -m unittest discover -s tests -v"),
+              "newsprocesing": ("newsprocesing", "data/processing/news-processing", "python", "uv run python -m unittest discover -p 'test_*.py' -v"),
+              "airflow": ("airflow", "data/orchestration/airflow", "none", "python3 -m compileall -q dags"),
+              "frontend": ("frontend", "frontend/kstockFE", "node", "npm ci && npm run build"),
+              "aggregate": ("aggregate", "data/processing/ohlcv-aggregator", "python", "uv run python -m unittest discover -s tests -v"),
+              "recorddata": ("recorddata", "data/ingestion/tick-recorder", "python", "uv run python -m pytest -q"),
+              "collectdata": ("collectdata", "data/ingestion/market-collector", "python", ""),
+              "nginx": ("nginx", "platform/nginx", "none", "docker compose -f docker-compose.yaml config -q"),
+              "infrastructure": ("infrastructure", "platform/infrastructure", "terraform", "terraform fmt -check -recursive"),
           }
 
           changed = json.loads(os.environ.get("FILTER_OUTPUTS") or "{}")

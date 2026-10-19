@@ -71,7 +71,7 @@ services:
 
   aggregate_tick_to_clickhouse:
     build:
-      context: ./utils/Aggregate
+      context: ./data/processing/ohlcv-aggregator
       dockerfile: Dockerfile
     image: aggregate-tick:v1
     container_name: aggregate-tick-to-clickhouse

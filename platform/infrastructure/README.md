@@ -14,7 +14,7 @@ This directory contains production-ready Terraform code to deploy the **Kstock**
 - **Tier 2: Private Backend Subnet (`10.10.20.0/24`)**:
   - Compute Instance: `kstock-backend-vm` (Static Internal IP: `10.10.20.10`).
   - **No external public IP** (completely hidden from public Internet).
-  - Runs `AuthenApp` (FastAPI:8000) and `InteractionApp` (Go:8080).
+  - Runs `auth-service` (FastAPI:8000) and `core-api` (Go:8080).
   - Firewall: Ingress strictly restricted to Tier 1 (Nginx). Outbound internet access via Cloud NAT (e.g. for Google OAuth, external APIs).
 - **Tier 3: Restricted Data & Pipeline Subnet (`10.10.30.0/24`)**:
   - Compute Instance: `kstock-data-vm` (Static Internal IP: `10.10.30.10`).
@@ -70,7 +70,7 @@ gcloud services enable compute.googleapis.com iap.googleapis.com
 ### Step 2: Configure `terraform.tfvars`
 Navigate to the terraform directory and copy the template:
 ```bash
-cd infrastructure/terraform
+cd platform/infrastructure/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 Edit `terraform.tfvars` and set your `project_id = "YOUR_ACTUAL_GCP_PROJECT_ID"`.
@@ -119,7 +119,7 @@ Connect via IAP SSH:
 ```bash
 gcloud compute ssh kstock-backend-vm --zone=asia-southeast1-b --tunnel-through-iap
 ```
-Configure environment variables in `.env` for `AuthenApp` and `InteractionApp`:
+Configure environment variables in `.env` for `auth-service` and `core-api`:
 - `POSTGRES_HOST=10.10.30.10`
 - `REDIS_HOST=10.10.30.10`
 - `CLICKHOUSE_HOST=10.10.30.10`

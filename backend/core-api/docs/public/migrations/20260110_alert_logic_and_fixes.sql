@@ -2,7 +2,7 @@
 -- Applies to PostgreSQL 13 (interactdb)
 --
 -- Run with:
---   psql -h localhost -U postgres -d interactdb -f InteractionApp/docs/public/migrations/20260110_alert_logic_and_fixes.sql
+--   psql -h localhost -U postgres -d interactdb -f backend/core-api/docs/public/migrations/20260110_alert_logic_and_fixes.sql
 --
 -- All statements are idempotent so the file can be re-run safely.
 
