@@ -179,7 +179,7 @@ Kstock/
 │   │   ├── ohlcv-aggregator/   # Sub-day OHLCV candle builder (Kafka → ClickHouse)
 │   │   └── news-processing/    # Dedup (SimHash), chunking, embeddings → Qdrant
 │   └── orchestration/
-│       └── airflow/            # Batch DAGs (news, embedding, tick archival, ClickHouse load)
+│       └── airflow/            # Batch DAGs (news, embedding, tick lakehouse + data quality)
 │
 ├── frontend/                   # Financial Web Dashboard (React, TypeScript, Tailwind)
 ├── platform/
@@ -201,7 +201,7 @@ Kstock/
 | **Gateway & WAF** | Nginx LTS, OWASP ModSecurity CRS | Reverse proxy, rate limiting, SSL termination, and OWASP Top 10 defense |
 | **Core Services** | Go 1.25+ (Gin, Gorilla WebSocket)<br>Python 3.12+ (FastAPI, Beanie ODM) | REST API business logic, low-latency WebSocket streaming, JWT issuance |
 | **Event Streaming** | Apache Kafka | Backbone for real-time market tick distribution (`raw_data_trade`) |
-| **OLAP & Time-Series** | ClickHouse (`MergeTree` engine) | Storage and analytical queries over billions of multi-timeframe OHLCV candles |
+| **OLAP & Time-Series** | ClickHouse (`MergeTree` engine) | Storage and analytical queries over ~2.45M multi-timeframe OHLCV candles (1m → 1d) |
 | **Relational Database** | PostgreSQL 13 | Business data (favorites, alerts, transactions) and news articles |
 | **Document Store & Cache** | MongoDB, Redis (LRU 512MB) | User profiles, Refresh Token management, Sessions, and transient cache |
 | **Data Lake & Storage** | AWS S3 / Cloudflare R2, Apache Parquet | Compressed Parquet raw ticks and raw news JSON |
@@ -248,7 +248,8 @@ flowchart LR
     Kafka["Kafka: raw_data_trade"] --> Agg["Aggregate Service\n(Tick-to-Bar Aggregator)"]
     Agg -->|Sub-day Bars\n1m, 5m, 15m, 1h| CH[("ClickHouse\naggregate_db")]
     
-    YF["yfinance Loader\n(Airflow DAG)"] -->|Daily & Weekly Bars\n1d, 1w| CH
+    YF["yfinance Loader\n(Airflow DAG)"] -->|Daily History\n1d, 1w 🚧| CH
+    LAKE["Tick Lakehouse\n(Airflow DAG)"] -->|Nightly Daily Bars\n1d| CH
     
     CH --> API["core-api\n(Chart REST API)"]
     CH --> FEAT["Feature Engineering\n(Returns, Volatility, Momentum)"]
@@ -256,7 +257,7 @@ flowchart LR
 ```
 
 - **Sub-day Aggregation**: The `Aggregate` worker continuously consumes ticks from Kafka, builds candles for the `1m`, `5m`, `15m`, and `1h` windows, and batch-writes them directly to ClickHouse.
-- **Daily / Weekly Sync**: Daily (`1d`) and weekly (`1w`) candles are synced periodically via an Airflow DAG combined with `yfinance`.
+- **Daily / Weekly Sync**: The 3-year daily (`1d`) history is loaded via an Airflow DAG combined with `yfinance`; each new trading day is rebuilt nightly from the tick lakehouse (`tick_lakehouse_daily` DAG). Weekly (`1w`) candles are in progress 🚧.
 - **Machine Learning (WIP)**:
   - Extracts technical features from ClickHouse (rolling returns, volatility, momentum, volume distribution).
   - Trains an **XGBoost** classification model to predict the price trend (up/down) of the next trading session.
