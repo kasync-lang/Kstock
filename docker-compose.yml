@@ -1,104 +1,472 @@
+# =============================================================================
+# Kstock — full local stack
+#
+#   docker compose up -d --build                  # storage + backend + frontend + streaming pipeline
+#   docker compose --profile market-feed up -d    # + live tick collector (needs WS_URL* in .env)
+#   docker compose --profile airflow up -d        # + Airflow batch DAGs (UI: http://localhost:8089)
+#   docker compose --profile news run --rm news-ingester
+#   docker compose --profile news run --rm news-processing --symbol AAPL --date 2026-10-14
+#
+# Every variable has a local default; copy .env.example to .env only to override
+# them or to add external API keys. The cloud deployment is configured separately.
+# =============================================================================
+name: kstock-local
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-kafka-env: &kafka-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAFKA_TOPIC: ${KAFKA_TOPIC:-raw_data_trade}
+
+x-clickhouse-env: &clickhouse-env
+  CLICKHOUSE_HOST: clickhouse
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dev}
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev_password}
+
+x-s3-env: &s3-env
+  S3_BUCKET: ${S3_BUCKET:-kstock-bucket-dev}
+  BUCKET_URL: http://minio:9000
+  ENDPOINT_URL: http://minio:9000
+  S3_FORCE_PATH_STYLE: "true"
+  AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+  AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio_password}
+  AWS_DEFAULT_REGION: us-east-1
+
+x-airflow-env: &airflow-env
+  <<: [*clickhouse-env, *s3-env]
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres/airflow
+  AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+  AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-local-airflow-jwt-secret}
+  AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+  # S3 connection used by dags/api/uploader.py
+  AIRFLOW_CONN_UPLOAD_CON_DEFAULT: >-
+    {"conn_type": "aws", "login": "${MINIO_ROOT_USER:-minio}", "password": "${MINIO_ROOT_PASSWORD:-minio_password}",
+    "extra": {"endpoint_url": "http://minio:9000", "region_name": "us-east-1"}}
+  CLICKHOUSE_PORT: 8123
+  CLICKHOUSE_DB: aggregate_db
+  SECRET_KEY_HUB: ${FINNHUB_API_KEYS:-}
+  NEWS_PROCESSING_PATH: /opt/airflow/news-processing
+
+x-airflow-common: &airflow-common
+  profiles: ["airflow"]
+  build: ./data/orchestration/airflow
+  image: kstock-airflow:local
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: *airflow-env
+  volumes:
+    - ./data/orchestration/airflow/dags:/opt/airflow/dags
+    - ./data/processing/news-processing:/opt/airflow/news-processing:ro
+    - airflow_logs:/opt/airflow/logs
+    - market_data:/opt/airflow/data
+    - ./data/ingestion/tick-recorder/list_symbol.txt:/opt/airflow/data/list_symbol.txt:ro
+
 services:
-  interact_db_app:
-    image: postgres:13-alpine
-    container_name: db_interact
-    restart: unless-stopped
+  # ===========================================================================
+  # STORAGE & MESSAGING
+  # ===========================================================================
+  postgres:
+    <<: *restart
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-interactdb}
+      POSTGRES_DB: interactdb
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postges_interact_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./platform/local/postgres/init.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+      - ./backend/core-api/docs/public:/ddl/interactdb:ro
+      - ./platform/local/postgres/newsdb:/ddl/newsdb:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-interactdb}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d interactdb"]
       interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 5s
-    networks:
-      - BE
+      retries: 10
+
+  mongo:
+    <<: *restart
+    image: mongo:7.0
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
+    <<: *restart
     image: redis:8.8-alpine
-    container_name: redis
-    restart: unless-stopped
-    command:
-      - redis-server
-      - --appendonly
-      - yes
-      - --appendfsync
-      - everysec
-      - --maxmemory
-      - 512mb
-      - --maxmemory-policy
-      - allkeys-lru
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec",
+              "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 5s
-    networks:
-      - BE
+      retries: 10
 
-  clickhouse_db:
-    image: clickhouse:jammy
-    container_name: clickhouse_aggregate_db
-    restart: unless-stopped
+  kafka:
+    <<: *restart
+    image: apache/kafka:3.9.1
     environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-aggregate_db}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT:-29092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "${KAFKA_HOST_PORT:-29092}:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists
+        --topic ${KAFKA_TOPIC:-raw_data_trade} --partitions 3 --replication-factor 1
+    restart: "no"
+
+  clickhouse:
+    <<: *restart
+    image: clickhouse:jammy
+    environment:
+      CLICKHOUSE_DB: aggregate_db
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dev}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev_password}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
     volumes:
-      - clickhouse_data:/var/lib/clickhouse/
+      - clickhouse_data:/var/lib/clickhouse
+      - ./platform/local/clickhouse/init.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+      - ./data/processing/ohlcv-aggregator/aggregate_db:/ddl/aggregate_db:ro
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - BE
+      retries: 10
 
-  aggregate_tick_to_clickhouse:
-    build:
-      context: ./data/processing/ohlcv-aggregator
-      dockerfile: Dockerfile
-    image: aggregate-tick:v1
-    container_name: aggregate-tick-to-clickhouse
-    restart: unless-stopped
+  minio:
+    <<: *restart
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-192.168.2.100:29092}
-      KAFKA_PULL_TOPIC: ${KAFKA_PULL_TOPIC:-raw_data_trade}
-      CLICKHOUSE_HOST: clickhouse_db
-      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_password}
+    ports:
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        && mc mb --ignore-existing "local/$${S3_BUCKET}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_password}
+      S3_BUCKET: ${S3_BUCKET:-kstock-bucket-dev}
+    restart: "no"
+
+  qdrant:
+    <<: *restart
+    image: qdrant/qdrant:v1.15.4
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # ===========================================================================
+  # BACKEND — serving layer
+  # ===========================================================================
+  auth-service:
+    <<: *restart
+    build: ./backend/auth-service
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PRIVATE_KEY_PATH: /secrets          # private.pem / public.pem (see README)
+      ENVIRONMENT: dev
+      PREFIX_API: ""
+      MONGO_URI: mongodb://mongo:27017
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ALGORITHM: RS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      FRONTEND_HOST: http://localhost:${FRONTEND_PORT:-5173}
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-5173}
+      BACKEND_CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-5173},http://localhost:${GATEWAY_PORT:-80}
+      DOMAIN: localhost
+      FIRST_SUPERUSER: ${FIRST_SUPERUSER:-admin@example.com}
+      FIRST_SUPERUSER_EMAIL: ${FIRST_SUPERUSER:-admin@example.com}
+      FIRST_SUPERUSER_PASSWORD: ${FIRST_SUPERUSER_PASSWORD:-changethis}
+    volumes:
+      - ./backend/auth-service:/secrets:ro
+    ports:
+      - "${AUTH_PORT:-8000}:8000"
+
+  core-api:
+    <<: *restart
+    build: ./backend/core-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_started
+    environment:
+      <<: *kafka-env
+      APP_PORT: 8080
+      URLDATABASE: postgres
+      DATABASENAME: interactdb
+      USERDATABASE: ${POSTGRES_USER:-postgres}
+      PASSWORDDATABASE: ${POSTGRES_PASSWORD:-postgres}
+      AUTHTHEN_HOST: http://auth-service:8000/.well-known/jwk
+      KAFKA_GROUP_ID: core-api
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-dev}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-dev_password}
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-aggregate_db}
-    depends_on:
-      clickhouse_db:
-        condition: service_healthy
-    networks:
-      - BE
+      CLICKHOUSE_DATABASE: aggregate_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "${CORE_API_PORT:-8080}:8080"
 
-networks:
-  BE:
-    name: BE
-    driver: bridge
+  stream-gateway:
+    <<: *restart
+    build: ./backend/stream-gateway
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 9092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-raw_data_trade}
+      KAFKA_GROUP_ID: stream-gateway
+
+  # ===========================================================================
+  # EDGE — WAF gateway + web client
+  # ===========================================================================
+  gateway:
+    <<: *restart
+    image: owasp/modsecurity-crs:4.25.0-nginx-lts
+    depends_on:
+      - auth-service
+      - core-api
+      - stream-gateway
+    environment:
+      PORT: "8080"
+      BLOCKING_PARANOIA: 1
+      ANOMALY_INBOUND: 5
+      ANOMALY_OUTBOUND: 4
+      MODSEC_RULE_ENGINE: ${MODSEC_RULE_ENGINE:-On}
+      MODSEC_AUDIT_ENGINE: RelevantOnly
+      MODSEC_AUDIT_LOG_FORMAT: JSON
+      LOGLEVEL: warn
+    volumes:
+      - ./platform/local/gateway.conf.template:/etc/nginx/templates/conf.d/default.conf.template:ro
+      - ./platform/nginx/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro
+    ports:
+      - "${GATEWAY_PORT:-80}:8080"
+
+  frontend:
+    <<: *restart
+    build:
+      context: ./frontend/kstockFE
+      args:
+        VITE_AUTH_BASE_URL: http://localhost:${GATEWAY_PORT:-80}
+        VITE_API_BASE_URL: /api
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - gateway
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+  # ===========================================================================
+  # DATA ENGINEERING — streaming pipeline
+  # ===========================================================================
+  market-collector:
+    <<: *restart
+    profiles: ["market-feed"]
+    build: ./data/ingestion/market-collector
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *kafka-env
+      MARKET_STATUS_URL: ${MARKET_STATUS_URL:-}
+      WS_URL1: ${WS_URL1:-}
+      WS_URL2: ${WS_URL2:-}
+      WS_URL3: ${WS_URL3:-}
+      WS_URL4: ${WS_URL4:-}
+
+  tick-recorder:
+    <<: *restart
+    build: ./data/ingestion/tick-recorder
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: [*kafka-env, *s3-env]
+      KAFKA_GROUP_ID: tick-recorder
+    volumes:
+      - market_data:/data
+
+  ohlcv-aggregator:
+    <<: *restart
+    build: ./data/processing/ohlcv-aggregator
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *clickhouse-env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_PULL_TOPIC: ${KAFKA_TOPIC:-raw_data_trade}
+      KAFKA_GROUP_ID: ohlcv-aggregator
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DB: aggregate_db
+
+  # ===========================================================================
+  # DATA ENGINEERING — news jobs (one-shot, run on demand)
+  # ===========================================================================
+  news-ingester:
+    profiles: ["news"]
+    build: ./data/ingestion/news-ingester
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *s3-env
+      SECRET_KEY_HUB: ${FINNHUB_API_KEYS:-}
+    restart: "no"
+
+  news-processing:
+    profiles: ["news"]
+    build: ./data/processing/news-processing
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: newsdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: news_article_chunks
+    restart: "no"
+
+  # ===========================================================================
+  # DATA ENGINEERING — Airflow orchestration
+  # ===========================================================================
+  airflow-init:
+    <<: *airflow-common
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - mkdir -p /opt/airflow/data/raw /opt/airflow/data/merged /opt/airflow/data/news
+        && chown -R ${AIRFLOW_UID:-50000}:0 /opt/airflow/logs /opt/airflow/data/raw /opt/airflow/data/merged /opt/airflow/data/news
+        && exec /entrypoint airflow version
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+    restart: "no"
+
+  airflow-apiserver:
+    <<: [*airflow-common, *restart]
+    command: api-server
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "${AIRFLOW_PORT:-8089}:8080"
+
+  airflow-scheduler:
+    <<: [*airflow-common, *restart]
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: [*airflow-common, *restart]
+    command: dag-processor
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
 volumes:
-  postges_interact_data:
-    name: postges_interact_data
-  clickhouse_data:
-    name: clickhouse_data
+  postgres_data:
+  mongo_data:
   redis_data:
-    name: redis_data
+  kafka_data:
+  clickhouse_data:
+  minio_data:
+  qdrant_data:
+  market_data:
+  airflow_logs:

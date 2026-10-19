@@ -16,8 +16,9 @@ A distributed stock-market data and analytics platform built on an **Event-Drive
   - [3. Financial News Ingestion & RAG Intelligence Pipeline](#3-financial-news-ingestion--rag-intelligence-pipeline)
 - [Security & Operational Characteristics](#security--operational-characteristics)
 - [Deployment Guide](#deployment-guide)
-  - [Port Mappings](#port-mappings)
-  - [Launching the System](#launching-the-system)
+  - [Local Quick Start](#local-quick-start)
+  - [Optional Profiles](#optional-profiles)
+  - [Local Port Mappings](#local-port-mappings)
 - [License](#license)
 
 ---
@@ -183,10 +184,11 @@ Kstock/
 ├── frontend/                   # Financial Web Dashboard (React, TypeScript, Tailwind)
 ├── platform/
 │   ├── nginx/                  # Reverse Proxy & WAF (ModSecurity Core Rule Set)
-│   └── infrastructure/         # Terraform IaC (GCP Compute, VPC, NAT, Firewalls)
+│   ├── infrastructure/         # Terraform IaC (GCP Compute, VPC, NAT, Firewalls)
+│   └── local/                  # Local-stack support: DB init scripts, gateway routes
 │
-├── docker-compose.yml          # Storage layer + OHLCV aggregator
-└── compose.auth.yaml           # Gateway + auth-service + core-api (local, git-ignored)
+├── docker-compose.yml          # Full local stack (see Deployment Guide)
+└── .env.example                # Optional overrides for the local stack
 ```
 
 ---
@@ -335,62 +337,49 @@ flowchart LR
 
 ## Deployment Guide
 
-### Port Mappings
+The root `docker-compose.yml` runs the **whole platform locally** with zero external dependencies: every storage engine (PostgreSQL, MongoDB, Redis, Kafka, ClickHouse, MinIO as local S3, Qdrant) is containerized, and schemas are created automatically on first start from the DDL already in the repo.
 
-| Component | Container Port | Host Port | Purpose |
-|-----------|----------------|-----------|---------|
-| **WAF (Nginx + ModSecurity)** | 8080 / 8443 | `80` / `443` | Single entry point accepting HTTP/HTTPS from users |
-| **auth-service** | 8000 | `8000` | FastAPI Auth & User Management |
-| **core-api** | 8080 | `8080` | Core Go REST API |
-| **stream-gateway** | 8080 | `8080` | WebSocket Real-time Market Data Hub |
-| **PostgreSQL** | 5432 | `5432` | Relational Business & News Database |
-| **Redis** | 6379 | `6379` | Token Session & In-memory Cache |
-| **ClickHouse** | 8123 / 9000 | `8123` / `9000` | HTTP Interface & Native TCP Client |
-| **Kafka (Broker)** | 9092 | `29092` | Event Message Broker |
-
----
-
-### Launching the System
-
-#### 1. Prepare the Environment
-
-Make sure **Docker** and **Docker Compose** are installed, and configure the environment files:
+### Local Quick Start
 
 ```bash
-# Set up the environment configuration for the services
-cp backend/auth-service/.env.example backend/auth-service/.env
-cp backend/core-api/.env.example backend/core-api/.env
+# 1. RSA key pair used by auth-service to sign JWTs (once)
+openssl genrsa -out backend/auth-service/private.pem 2048
+openssl rsa -in backend/auth-service/private.pem -pubout -out backend/auth-service/public.pem
+
+# 2. (optional) override defaults / add external API keys
+cp .env.example .env
+
+# 3. Start storage + backend + frontend + streaming pipeline
+docker compose up -d --build
 ```
 
-#### 2. Start the Data & Storage Layer
+Open **http://localhost:5173** (web app). Default admin: `admin@example.com` / `changethis`.
 
-Start PostgreSQL, Redis, ClickHouse, and the tick aggregation service:
+### Optional Profiles
 
-```bash
-docker compose -f docker-compose.yml up -d
-```
+| Profile | Command | Adds | Needs in `.env` |
+|---------|---------|------|-----------------|
+| *(default)* | `docker compose up -d` | storage, backend, gateway, frontend, `tick-recorder`, `ohlcv-aggregator` | — |
+| `market-feed` | `docker compose --profile market-feed up -d` | `market-collector` (live ticks → Kafka) | `WS_URL1..4`, `MARKET_STATUS_URL` |
+| `news` | `docker compose --profile news run --rm news-ingester`<br>`docker compose --profile news run --rm news-processing --symbol AAPL --date 2026-10-14` | one-shot news jobs | `FINNHUB_API_KEYS`, `OPENAI_API_KEY` |
+| `airflow` | `docker compose --profile airflow up -d` | Airflow api-server, scheduler, dag-processor | `FINNHUB_API_KEYS` for news DAGs |
 
-#### 3. Start the Application & Gateway Layer
+### Local Port Mappings
 
-Start the Web Application Firewall, auth-service, and core-api:
+| Component | Host Port | Purpose |
+|-----------|-----------|---------|
+| **frontend** | `5173` | Web client (proxies `/api` to the gateway) |
+| **gateway** (Nginx + ModSecurity) | `80` | Single entry point: `/` → auth-service, `/api` → core-api, `/ws` → stream-gateway |
+| **auth-service** / **core-api** | `8000` / `8080` | Direct access for debugging (Swagger, curl) |
+| **PostgreSQL** | `5432` | `interactdb` (backend), `newsdb` (news pipeline), `airflow` |
+| **MongoDB** / **Redis** | `27017` / `6379` | Users & credentials / sessions & cache |
+| **Kafka** | `29092` | Broker for host clients (containers use `kafka:9092`) |
+| **ClickHouse** | `8123` / `9000` | HTTP / native, database `aggregate_db` |
+| **MinIO** | `9100` / `9101` | S3 API / console, bucket `kstock-bucket-dev` |
+| **Qdrant** | `6333` | Vector store for news chunks |
+| **Airflow** | `8089` | UI (profile `airflow`) |
 
-```bash
-docker compose -f compose.auth.yaml up -d
-```
-
-#### 4. Run the News Processing Pipeline (News NLP & Embedding)
-
-Run the news processing pipeline for a specific symbol:
-
-```bash
-cd data/processing/news-processing
-
-# Install dependencies (via uv or pip)
-uv sync
-
-# Run the flow: Dedup → Chunk → Generate Embeddings
-python pipeline.py --symbol AAPL --date 2026-10-14 --threshold 3
-```
+Every host port can be changed in `.env` (see `.env.example`). Reset all local data with `docker compose down -v`.
 
 ---
 

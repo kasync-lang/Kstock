@@ -1,0 +1,7 @@
+.env*
+.idea
+data
+kafka-test
+test
+*.md
+Dockerfile

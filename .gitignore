@@ -289,3 +289,6 @@ terraform.rc
 
 # ggshield cache
 .cache_ggshield
+
+# Local stack overrides template
+!/.env.example
