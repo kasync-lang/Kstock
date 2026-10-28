@@ -150,9 +150,7 @@ async def test_signup_rejects_existing_verified_user(client, user_account, monke
 
 
 @pytest.mark.asyncio
-async def test_signup_creates_user_and_schedules_verification_email(client, unverified_user_account, monkeypatch: pytest.MonkeyPatch) -> None:
-    sent_emails: list[dict[str, str]] = []
-    email_data = SimpleNamespace(subject="Verify", html_content="<b>Verify</b>")
+async def test_signup_creates_user_and_queues_verification_email(client, unverified_user_account, sent_emails, monkeypatch: pytest.MonkeyPatch) -> None:
 
     async def fake_get_user_by_email(*, email: str):
         return None
@@ -164,12 +162,6 @@ async def test_signup_creates_user_and_schedules_verification_email(client, unve
     monkeypatch.setattr(login.crud, "create_user", fake_create_user)
     monkeypatch.setattr(login, "is_strong_password", lambda password: True)
     monkeypatch.setattr(login, "generate_password_reset_token", lambda email: "verify-token")
-    monkeypatch.setattr(login, "generate_signup_verify_email", lambda email, token: email_data)
-    monkeypatch.setattr(
-        login,
-        "send_email",
-        lambda **kwargs: sent_emails.append(kwargs),
-    )
 
     response = client.post(
         "/signup",
@@ -178,13 +170,10 @@ async def test_signup_creates_user_and_schedules_verification_email(client, unve
 
     assert response.status_code == 200
     assert response.json()["email"] == unverified_user_account.email
-    assert sent_emails == [
-        {
-            "email_to": "new@example.com",
-            "subject": "Verify",
-            "html_content": "<b>Verify</b>",
-        }
-    ]
+    assert len(sent_emails) == 1
+    assert sent_emails[0]["template"] == "verify_email"
+    assert sent_emails[0]["to"] == "new@example.com"
+    assert sent_emails[0]["data"]["verify_link"].endswith("/signup-verify?token=verify-token")
 
 
 @pytest.mark.asyncio
@@ -328,29 +317,22 @@ async def test_password_recovery_rejects_unknown_email(client, monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_password_recovery_sends_reset_email(client, user_account, monkeypatch: pytest.MonkeyPatch) -> None:
-    sent_emails: list[dict[str, str]] = []
-    email_data = SimpleNamespace(subject="Reset", html_content="<b>Reset</b>")
+async def test_password_recovery_sends_reset_email(client, user_account, sent_emails, monkeypatch: pytest.MonkeyPatch) -> None:
 
     async def fake_get_user_by_email(*, email: str):
         return user_account
 
     monkeypatch.setattr(login.crud, "get_user_by_email", fake_get_user_by_email)
     monkeypatch.setattr(login, "generate_password_reset_token", lambda email: "reset-token")
-    monkeypatch.setattr(login, "generate_reset_password_email", lambda email_to, email, token: email_data)
-    monkeypatch.setattr(login, "send_email", lambda **kwargs: sent_emails.append(kwargs))
 
     response = client.post(f"/password-recovery/{user_account.email}")
 
     assert response.status_code == 200
     assert response.json() == {"message": "Password recovery email sent"}
-    assert sent_emails == [
-        {
-            "email_to": user_account.email,
-            "subject": "Reset",
-            "html_content": "<b>Reset</b>",
-        }
-    ]
+    assert len(sent_emails) == 1
+    assert sent_emails[0]["template"] == "reset_password"
+    assert sent_emails[0]["to"] == user_account.email
+    assert sent_emails[0]["data"]["link"].endswith("/reset-password?token=reset-token")
 
 
 def test_auth_google_redirects_and_sets_oauth_cookies(client, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 
 from app.api import deps
 from app.api.main import api_router
+from app.core import mail
 from app.core.config import KeyStore
 from app.model.User import Oauth2Account, User
 from app.schema.user import UserPublic
@@ -144,6 +145,18 @@ def api_app(in_memory_redis: InMemoryRedis) -> FastAPI:
 def client(api_app: FastAPI):
     with TestClient(api_app) as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def sent_emails(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Records email requests instead of publishing them to Kafka."""
+    sent: list[dict[str, Any]] = []
+
+    async def fake_send_email(*, template: str, to: str, data: dict[str, Any]) -> None:
+        sent.append({"template": template, "to": to, "data": data})
+
+    monkeypatch.setattr(mail, "send_email", fake_send_email)
+    return sent
 
 
 @pytest.fixture

@@ -5,10 +5,9 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from app.core import crud
 from app.api.deps import CurrentAccount, get_current_active_superuser, CurrentUser
-from fastapi import BackgroundTasks
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
-from app.utils import generate_new_account_email, send_email
+from app.core import mail
 from app.schema.user import UsersPublic, UserCreate, Message, UserPublic
 from app.model.User import Oauth2Account, User
 from app.api.deps import parse_user_db_to_currentuser
@@ -27,21 +26,20 @@ async def read_users(skip:int = 1, limit:int = 100) -> Any:
         data_user.append(parse_user_db_to_currentuser(user))
     return UsersPublic(data=data_user)
 @router.post("/", dependencies=[Depends(get_current_active_superuser)],response_model=UserPublic)
-async def create_user(user_in: UserCreate, backgroud_task: BackgroundTasks) -> Any:
+async def create_user(user_in: UserCreate) -> Any:
     user_db  = await crud.get_user_by_email(email=user_in.email)
     if user_db:
         raise HTTPException(status_code=409, detail="User already exists")
     user_db = await crud.create_user(user_create=user_in)
-    if settings.emails_enabled and user_db.email:
-        email_data = generate_new_account_email(
-            email_to = user_in.email,
-            username= user_in.email, password=user_in.password,
-        )
-        backgroud_task.add_task(
-            send_email,
-            email_to=user_in.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
+    if user_db.email:
+        await mail.send_email(
+            template="new_account",
+            to=user_in.email,
+            data={
+                "username": user_in.email,
+                "password": user_in.password,
+                "link": settings.FRONTEND_HOST,
+            },
         )
 
     logging.warning(f"New user created: {user_db.email}")

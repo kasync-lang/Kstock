@@ -1,24 +1,23 @@
 # AuthenApp
 
-Ứng dụng xác thực trung tâm xây bằng FastAPI, Beanie/MongoDB, JWT và OAuth2 Google.
+Central authentication application built with FastAPI, Beanie/MongoDB, JWT, and Google OAuth2.
 
-## Chạy test
+## Running tests
 
-Đồng bộ môi trường dev:
+Sync the dev environment:
 
 ```bash
 uv sync --group dev
 ```
 
-Chạy toàn bộ test:
+Run all tests:
 
 ```bash
 uv run pytest app/test -q
 ```
 
-Chạy test kèm coverage:
+Run tests with coverage:
 
 ```bash
 uv run pytest app/test --cov=app --cov-report=term-missing -q
 ```
-

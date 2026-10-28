@@ -65,27 +65,15 @@ class Setting(BaseSettings):
         return [str(origin).rstrip("/") for origin in self.BACKEND_CORS_ORIGINS] + [
             self.FRONTEND_HOST
         ]
-    SMTP_TLS: bool = True
-    SMTP_SSL: bool = False
-    SMTP_PORT: int = 587
-    SMTP_HOST: str | None = None
-    SMTP_USER: str | None = None
-    SMTP_PASSWORD: str | None = None
-    EMAILS_FROM_EMAIL: EmailStr | None = None
-    EMAILS_FROM_NAME: EmailStr | None = None
-    PROJECT_NAME: str | None = "Kstock Authentication"
+    # Emails are sent by mail-service; auth-service only publishes requests.
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:29092"
+    KAFKA_EMAIL_TOPIC: str = "email_requests"
     REDIS_HOST: str
     REDIS_PORT: int
     FRONTEND_HOST: str
     FRONTEND_URL: str = "http://localhost:5173"
     MONGO_URI:str
     PREFIX_API:str = ""
-
-    @model_validator(mode="after")
-    def _set_default_emails_from(self) -> Self:
-        if not self.EMAILS_FROM_NAME:
-            self.EMAILS_FROM_NAME = self.PROJECT_NAME
-        return self
 
     @model_validator(mode="after")
     def load_google_secret(self) -> Self:
@@ -112,11 +100,6 @@ class Setting(BaseSettings):
         return self
 
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 1
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def emails_enabled(self) -> bool:
-        return bool(self.SMTP_HOST and self.EMAILS_FROM_EMAIL)
 
     EMAIL_TEST_USER: EmailStr = "test@example.com"
     FIRST_SUPERUSER: EmailStr

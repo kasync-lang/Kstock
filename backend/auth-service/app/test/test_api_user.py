@@ -97,10 +97,9 @@ async def test_create_user_rejects_duplicate_email(client, auth_overrides, super
 
 
 @pytest.mark.asyncio
-async def test_create_user_creates_account_and_sends_email(client, auth_overrides, superuser_account, superuser_public, user_account, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_create_user_creates_account_and_sends_email(client, auth_overrides, superuser_account, superuser_public, user_account, sent_emails, monkeypatch: pytest.MonkeyPatch) -> None:
     auth_overrides(public_user=superuser_public, account=superuser_account, superuser=True)
-    sent_emails: list[tuple[str, str, str]] = []
-    monkeypatch.setattr(user_api, "settings", SimpleNamespace(emails_enabled=True))
+    monkeypatch.setattr(user_api, "settings", SimpleNamespace(FRONTEND_HOST="http://frontend.local"))
 
     async def fake_get_user_by_email(*, email: str):
         return None
@@ -110,12 +109,6 @@ async def test_create_user_creates_account_and_sends_email(client, auth_override
 
     monkeypatch.setattr(user_api.crud, "get_user_by_email", fake_get_user_by_email)
     monkeypatch.setattr(user_api.crud, "create_user", fake_create_user)
-    monkeypatch.setattr(
-        user_api,
-        "generate_new_account_email",
-        lambda email_to, username, password: SimpleNamespace(subject="Welcome", html_content="<b>Welcome</b>"),
-    )
-    monkeypatch.setattr(user_api, "send_email", lambda email_to, subject, html_content: sent_emails.append((email_to, subject, html_content)))
 
     response = client.post(
         "/user/",
@@ -124,7 +117,13 @@ async def test_create_user_creates_account_and_sends_email(client, auth_override
 
     assert response.status_code == 200
     assert response.json()["email"] == user_account.email
-    assert sent_emails == [("user@example.com", "Welcome", "<b>Welcome</b>")]
+    assert sent_emails == [
+        {
+            "template": "new_account",
+            "to": "user@example.com",
+            "data": {"username": "user@example.com", "password": "StrongPass1!", "link": "http://frontend.local"},
+        }
+    ]
 
 
 @pytest.mark.asyncio

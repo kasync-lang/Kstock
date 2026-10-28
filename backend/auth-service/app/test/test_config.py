@@ -46,10 +46,6 @@ def test_setting_computed_fields_and_email_flag() -> None:
         ALGORITHM="RS256",
         ACCESS_TOKEN_EXPIRE_MINUTES=30,
         BACKEND_CORS_ORIGINS="http://api.local, http://admin.local",
-        SMTP_HOST="smtp.local",
-        EMAILS_FROM_EMAIL="noreply@example.com",
-        EMAILS_FROM_NAME="sender@example.com",
-        PROJECT_NAME="Auth Test",
     )
 
     assert settings.all_cors_origins == [
@@ -57,7 +53,7 @@ def test_setting_computed_fields_and_email_flag() -> None:
         "http://admin.local",
         "http://frontend.local",
     ]
-    assert settings.emails_enabled is True
+    assert settings.KAFKA_EMAIL_TOPIC == "email_requests"
     assert settings.REFRESH_TOKEN_EXPIRE_DAYS == 7
     assert settings.REFRESH_TOKEN_COOKIE_NAME == "refresh_token"
     assert settings.REFRESH_TOKEN_COOKIE_SECURE is False

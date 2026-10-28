@@ -7,7 +7,7 @@ from google_auth_oauthlib.flow import Flow
 import secrets
 from beanie import PydanticObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from app.schema.token import Token
@@ -16,12 +16,8 @@ from app.core import security
 from app.core import session as session_manager
 from app.schema.user import UserPublic, NewPassword, Message, UserCreate, UserRegister, Oauth2AccountBase
 from app.utils import verify_password_reset_token
-from app.utils import (
-    generate_password_reset_token,
-    generate_reset_password_email,
-    generate_signup_verify_email,
-    send_email,
-)
+from app.utils import generate_password_reset_token
+from app.core import mail
 from app.core.security import is_strong_password
 from app.api.deps import CurrentUser, parse_user_db_to_currentuser, get_redis
 from app.core.config import settings
@@ -154,21 +150,22 @@ async def logout(
 
 
 @router.post("/signup", response_model=UserPublic)
-async def register_user(user_in: UserRegister, background_tasks: BackgroundTasks):
+async def register_user(user_in: UserRegister):
     user = await crud.get_user_by_email(email=user_in.email)
     if not user or not user.is_verified:
         if not is_strong_password(user_in.password):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password too weak")
             return
         user_create = UserCreate.model_validate(user_in.model_dump(exclude_unset=True))
-        email_data = generate_signup_verify_email(
-            email=user_in.email, token=generate_password_reset_token(user_in.email)
-        )
-        background_tasks.add_task(
-            send_email,
-            email_to=user_in.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
+        token = generate_password_reset_token(user_in.email)
+        await mail.send_email(
+            template="verify_email",
+            to=user_in.email,
+            data={
+                "username": user_in.email,
+                "verify_link": f"{settings.FRONTEND_HOST}{settings.PREFIX_API}/signup-verify?token={token}",
+                "expiry_hours": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            },
         )
         if not user:
             user = await crud.create_user(user_create=user_create)
@@ -227,11 +224,14 @@ async def recover_password(email: str) -> Message:
     if not user:
         raise HTTPException(status_code=404, detail="This user is not registered")
     password_reset_token = generate_password_reset_token(email=email)
-    email_data = generate_reset_password_email(
-        email_to=user.email, email=email, token=password_reset_token
-    )
-    send_email(
-        email_to=user.email, subject=email_data.subject, html_content=email_data.html_content
+    await mail.send_email(
+        template="reset_password",
+        to=user.email,
+        data={
+            "username": email,
+            "link": f"{settings.FRONTEND_HOST}/reset-password?token={password_reset_token}",
+            "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
+        },
     )
     return Message(message="Password recovery email sent")
 

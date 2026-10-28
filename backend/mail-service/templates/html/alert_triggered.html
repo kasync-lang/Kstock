@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.symbol}} alert</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:24px auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e6e6e6;">
+    <tr>
+      <td style="padding:20px;text-align:center;background:#fafafa;border-bottom:1px solid #eee;">
+        <div style="font-size:14px;color:#666;">{{.app_name}}</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px 32px;color:#333;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111;">🔔 Cảnh báo {{.symbol}} đã kích hoạt</h1>
+        <p style="margin:0 0 18px;font-size:15px;line-height:1.5;">
+          Giá khớp: <strong>{{.price}}</strong>
+        </p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 18px;">
+          <tr>
+            <td style="padding:12px;border:1px solid #e6edf3;border-radius:6px;background:#fbfdff;font-size:14px;color:#0f172a;">
+              <strong>Điều kiện:</strong> {{.conditions}}<br>
+              <strong>Thời điểm:</strong> {{.triggered_at}}
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0;font-size:13px;color:#666;line-height:1.5;">
+          Cảnh báo này chỉ kích hoạt một lần. Bật lại cảnh báo trong ứng dụng nếu bạn muốn tiếp tục theo dõi.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 32px;background:#fafafa;border-top:1px solid #eee;font-size:12px;color:#999;">
+        © {{.year}} {{.app_name}}
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

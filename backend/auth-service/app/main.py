@@ -6,6 +6,7 @@ from fastapi import Request
 from app.core.config import KeyStore
 from dotenv import load_dotenv
 from app.core.db import init_db
+from app.core import mail
 from fastapi.templating import Jinja2Templates
 from app.api.main import api_router
 from app.api.deps import register_exception_handlers
@@ -26,7 +27,9 @@ async def lifespan(app: FastAPI):
         port=settings.REDIS_PORT,
         decode_responses=True,
     )
+    await mail.start()
     yield
+    await mail.stop()
     await app.state.redis.aclose()
 
 app = FastAPI(lifespan=lifespan)
