@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
@@ -13,6 +13,10 @@ import {
 import type { NoteDetail, UserPublic } from '../types'
 import { useFavorites } from '../context'
 import { formatAuthError } from '../utils/authErrors'
+import NoteCard from '../components/notes/NoteCard'
+import type { NoteFormValues } from '../components/notes/NoteForm'
+import { sortNotesNewestFirst } from '../components/notes/noteUtils'
+import '../components/notes/Notes.css'
 import './AccountPage.css'
 
 type AccountTab = 'profile' | 'favorites' | 'notes'
@@ -26,19 +30,6 @@ const ACCOUNT_TABS: AccountTab[] = ['profile', 'favorites', 'notes']
 
 function isAccountTab(value: string | null): value is AccountTab {
   return value !== null && ACCOUNT_TABS.includes(value as AccountTab)
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
 }
 
 export default function AccountPage() {
@@ -58,12 +49,37 @@ export default function AccountPage() {
   const [profileMessage, setProfileMessage] = useState<FormStatus | null>(null)
   const [passwordMessage, setPasswordMessage] = useState<FormStatus | null>(null)
 
-  // Note edit state
-  const [editingNote, setEditingNote] = useState<NoteDetail | null>(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editContent, setEditContent] = useState('')
+  // Notes state
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [savingNote, setSavingNote] = useState(false)
   const [noteMessage, setNoteMessage] = useState<string | null>(null)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const [noteSearch, setNoteSearch] = useState('')
+  const [noteSymbolFilter, setNoteSymbolFilter] = useState('')
+
+  const noteSymbols = useMemo(
+    () => [...new Set((notes ?? []).map((note) => note.symbol.toUpperCase()))].sort(),
+    [notes],
+  )
+
+  const visibleNotes = useMemo(() => {
+    const query = noteSearch.trim().toLowerCase()
+    return (notes ?? []).filter(
+      (note) =>
+        (!noteSymbolFilter || note.symbol.toUpperCase() === noteSymbolFilter) &&
+        (!query ||
+          note.title.toLowerCase().includes(query) ||
+          note.content.toLowerCase().includes(query) ||
+          note.symbol.toLowerCase().includes(query)),
+    )
+  }, [notes, noteSearch, noteSymbolFilter])
+
+  // Success messages fade out on their own.
+  useEffect(() => {
+    if (!noteMessage) return
+    const timer = window.setTimeout(() => setNoteMessage(null), 3000)
+    return () => window.clearTimeout(timer)
+  }, [noteMessage])
 
   useEffect(() => {
     let isMounted = true
@@ -79,7 +95,7 @@ export default function AccountPage() {
         } else if (activeTab === 'notes') {
           const response = await getAllNotes()
           if (isMounted) {
-            setNotes(response.data ?? [])
+            setNotes(sortNotesNewestFirst(response.data ?? []))
             setLoading(false)
           }
         } else {
@@ -108,7 +124,8 @@ export default function AccountPage() {
     setProfileMessage(null)
     setPasswordMessage(null)
     setNoteMessage(null)
-    setEditingNote(null)
+    setNoteError(null)
+    setEditingNoteId(null)
   }
 
   const isOAuthUser = Boolean(user?.provider && user.provider.toLowerCase() !== 'local')
@@ -171,66 +188,43 @@ export default function AccountPage() {
     }
   }
 
-  const handleStartEditNote = (note: NoteDetail) => {
-    setEditingNote(note)
-    setEditTitle(note.title)
-    setEditContent(note.content)
-    setNoteMessage(null)
-  }
-
-  const handleCancelEditNote = () => {
-    setEditingNote(null)
-    setEditTitle('')
-    setEditContent('')
-  }
-
-  const handleSaveEditNote = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!editingNote) return
-
+  const handleSaveNote = async (noteId: string, { title, content }: NoteFormValues) => {
     setSavingNote(true)
     setNoteMessage(null)
+    setNoteError(null)
     try {
-      await updateNote({
-        id: editingNote.id,
-        title: editTitle.trim(),
-        content: editContent.trim(),
-      })
-
-      // Update state locally
+      await updateNote({ id: noteId, title, content })
       setNotes(
         (prev) =>
           prev?.map((n) =>
-            n.id === editingNote.id
-              ? {
-                  ...n,
-                  title: editTitle.trim(),
-                  content: editContent.trim(),
-                  updated_at: new Date().toISOString(),
-                }
+            n.id === noteId
+              ? { ...n, title, content, updated_at: new Date().toISOString() }
               : n,
-          ) || null,
+          ) ?? null,
       )
-      setEditingNote(null)
-      setNoteMessage('Note updated successfully.')
+      setEditingNoteId(null)
+      setNoteMessage('Note updated.')
+      return true
     } catch (err) {
       console.error(err)
-      setNoteMessage(err instanceof Error ? err.message : 'Failed to update note.')
+      setNoteError(err instanceof Error ? err.message : 'Failed to update note.')
+      return false
     } finally {
       setSavingNote(false)
     }
   }
 
   const handleDeleteNote = async (noteId: string) => {
+    setNoteMessage(null)
+    setNoteError(null)
     try {
       await deleteNote(noteId)
-      setNotes((prev) => prev?.filter((n) => n.id !== noteId) || null)
-      if (editingNote?.id === noteId) {
-        handleCancelEditNote()
-      }
+      setNotes((prev) => prev?.filter((n) => n.id !== noteId) ?? null)
+      if (editingNoteId === noteId) setEditingNoteId(null)
+      setNoteMessage('Note deleted.')
     } catch (err) {
       console.error(err)
-      setNoteMessage(err instanceof Error ? err.message : 'Failed to delete note.')
+      setNoteError(err instanceof Error ? err.message : 'Failed to delete note.')
     }
   }
 
@@ -498,134 +492,109 @@ export default function AccountPage() {
                 <div className="account-section-heading">
                   <h2>Research Notes</h2>
                   <p>
-                    {notes.length} saved note{notes.length === 1 ? '' : 's'}.
+                    {notes.length} saved note{notes.length === 1 ? '' : 's'}
+                    {noteSymbols.length > 0 &&
+                      ` across ${noteSymbols.length} symbol${noteSymbols.length === 1 ? '' : 's'}`}
+                    .
                   </p>
                 </div>
 
-                {noteMessage && <p className="account-message">{noteMessage}</p>}
-
-                {notes.length === 0 ? (
-                  <p className="account-status">No notes created yet.</p>
-                ) : (
-                  <div className="note-list">
-                    {notes.map((note) => (
-                      <article key={note.id} className="account-note">
-                        <button
-                          type="button"
-                          className="note-symbol"
-                          onClick={() => navigate(`/stock/${encodeURIComponent(note.symbol)}`)}
-                        >
-                          {note.symbol}
-                        </button>
-                        <div>
-                          <h3>{note.title}</h3>
-                          <p>{note.content}</p>
-                          <time>{formatDate(note.updated_at || note.created_at)}</time>
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleStartEditNote(note)}
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: '12px',
-                                background: '#1b2540',
-                                color: '#edf2ff',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteNote(note.id)}
-                              style={{
-                                padding: '4px 10px',
-                                fontSize: '12px',
-                                background: 'rgba(239, 83, 80, 0.15)',
-                                color: '#ff9da8',
-                                border: '1px solid rgba(239, 83, 80, 0.3)',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                {noteMessage && (
+                  <p className="notes-flash" role="status">
+                    {noteMessage}
+                  </p>
+                )}
+                {noteError && (
+                  <p className="notes-error" role="alert">
+                    {noteError}
+                  </p>
                 )}
 
-                {editingNote && (
-                  <div style={{ marginTop: '24px', padding: '20px', background: '#0a0f1d', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <h3 style={{ margin: '0 0 14px' }}>Edit Note: {editingNote.symbol}</h3>
-                    <form onSubmit={handleSaveEditNote} style={{ display: 'grid', gap: '12px' }}>
-                      <input
-                        type="text"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        placeholder="Note title"
-                        required
-                        style={{
-                          padding: '10px',
-                          background: '#101726',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: '6px',
-                          color: '#fff',
-                        }}
-                      />
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        placeholder="Note content"
-                        rows={4}
-                        required
-                        style={{
-                          padding: '10px',
-                          background: '#101726',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: '6px',
-                          color: '#fff',
-                          fontFamily: 'inherit',
-                          resize: 'vertical',
-                        }}
-                      />
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                          type="submit"
-                          disabled={savingNote}
-                          style={{
-                            padding: '8px 16px',
-                            background: '#23b9d5',
-                            color: '#07101b',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {savingNote ? 'Saving...' : 'Save Changes'}
-                        </button>
+                {notes.length === 0 ? (
+                  <div className="notes-empty">
+                    <p>
+                      <strong>No notes yet.</strong>
+                      <br />
+                      Open any stock and click the <strong>Notes</strong> button in the bottom-right
+                      corner to write your first one.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="notes-toolbar">
+                      <label className="notes-search">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="m20 20-3.5-3.5" />
+                        </svg>
+                        <input
+                          type="search"
+                          value={noteSearch}
+                          onChange={(e) => setNoteSearch(e.target.value)}
+                          placeholder="Search title, content or symbol"
+                          aria-label="Search notes"
+                        />
+                      </label>
+                      <select
+                        className="notes-filter"
+                        value={noteSymbolFilter}
+                        onChange={(e) => setNoteSymbolFilter(e.target.value)}
+                        aria-label="Filter by symbol"
+                      >
+                        <option value="">All symbols</option>
+                        {noteSymbols.map((symbol) => (
+                          <option key={symbol} value={symbol}>
+                            {symbol}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {(noteSearch || noteSymbolFilter) && (
+                      <p className="notes-result-count">
+                        Showing {visibleNotes.length} of {notes.length}
+                        {' · '}
                         <button
                           type="button"
-                          onClick={handleCancelEditNote}
-                          style={{
-                            padding: '8px 16px',
-                            background: 'transparent',
-                            color: '#abb5cb',
-                            border: '1px solid rgba(255,255,255,0.15)',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
+                          className="note-link-btn"
+                          onClick={() => {
+                            setNoteSearch('')
+                            setNoteSymbolFilter('')
                           }}
                         >
-                          Cancel
+                          Clear filters
                         </button>
+                      </p>
+                    )}
+
+                    {visibleNotes.length === 0 ? (
+                      <div className="notes-empty">
+                        <p>No notes match your filters.</p>
                       </div>
-                    </form>
-                  </div>
+                    ) : (
+                      <div className="notes-grid">
+                        {visibleNotes.map((note) => (
+                          <NoteCard
+                            key={note.id}
+                            note={note}
+                            showSymbol
+                            editing={editingNoteId === note.id}
+                            saving={savingNote}
+                            onSymbolClick={(symbol) =>
+                              navigate(`/stock/${encodeURIComponent(symbol)}`)
+                            }
+                            onStartEdit={() => {
+                              setNoteMessage(null)
+                              setEditingNoteId(note.id)
+                            }}
+                            onCancelEdit={() => setEditingNoteId(null)}
+                            onSave={(values) => handleSaveNote(note.id, values)}
+                            onDelete={() => handleDeleteNote(note.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

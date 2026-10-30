@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom'
 import {
   createChart,
@@ -13,10 +12,8 @@ import {
   type LogicalRange,
   type TickMarkType,
 } from 'lightweight-charts'
-import composeIcon from '../assets/compose.png'
 import { getSymbolDetail, getSymbols } from '../services/symbol.service'
-import { createNote, deleteNote, getNotesBySymbol } from '../services/note.service'
-import type { NoteDetail, SymbolBaseDetail, SymbolPreview } from '../types'
+import type { SymbolBaseDetail, SymbolPreview } from '../types'
 import { getLookbackSeconds, useChartHistory } from '../hooks/useChartHistory'
 import {
   formatCompactNumber,
@@ -31,6 +28,7 @@ import {
 } from '../utils/chart'
 import { calculateQuoteDetails } from '../utils/quote'
 import { useFavorites, useLivePrices } from '../context'
+import SymbolNotesPanel from '../components/notes/SymbolNotesPanel'
 
 /** Start fetching older history when fewer than this many bars remain off-screen on the left. */
 const LOAD_OLDER_THRESHOLD_BARS = 15
@@ -74,18 +72,11 @@ export default function StockDetailPage() {
   // Favorites Context integration
   const { isFavorite, toggleFavorite } = useFavorites()
   const [favoriteUpdating, setFavoriteUpdating] = useState(false)
+  const [favoriteError, setFavoriteError] = useState<string | null>(null)
 
   // Live prices hook
   const { prices } = useLivePrices([symbol])
   const liveTick = prices[symbol]
-
-  // Notes state
-  const [notes, setNotes] = useState<NoteDetail[]>([])
-  const [notesLoading, setNotesLoading] = useState(true)
-  const [notesSaving, setNotesSaving] = useState(false)
-  const [noteComposerOpen, setNoteComposerOpen] = useState(false)
-  const [noteEditorOpen, setNoteEditorOpen] = useState(false)
-  const [noteError, setNoteError] = useState<string | null>(null)
 
   const [hoverInfo, setHoverInfo] = useState<{
     date?: string
@@ -140,32 +131,6 @@ export default function StockDetailPage() {
   }, [symbol])
 
   useEffect(() => {
-    let isMounted = true
-
-    async function loadPersonalSymbolData() {
-      setNotesLoading(true)
-      setNoteError(null)
-      try {
-        const noteResponse = await getNotesBySymbol(symbol)
-        if (!isMounted) return
-        setNotes(noteResponse.data ?? [])
-      } catch (err) {
-        console.warn('Unable to load notes:', err)
-        if (isMounted) setNoteError('Unable to load saved notes.')
-      } finally {
-        if (isMounted) {
-          setNotesLoading(false)
-        }
-      }
-    }
-
-    loadPersonalSymbolData()
-    return () => {
-      isMounted = false
-    }
-  }, [symbol])
-
-  useEffect(() => {
     loadOlderRef.current = loadOlder
   }, [loadOlder])
 
@@ -190,47 +155,14 @@ export default function StockDetailPage() {
 
   const handleFavoriteToggle = async () => {
     setFavoriteUpdating(true)
+    setFavoriteError(null)
     try {
       await toggleFavorite(symbol)
     } catch (err) {
       console.warn('Unable to update favorite:', err)
-      setNoteError('Unable to update favorite status.')
+      setFavoriteError('Unable to update favorite status.')
     } finally {
       setFavoriteUpdating(false)
-    }
-  }
-
-  const handleCreateNote = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = event.currentTarget
-    const formData = new FormData(form)
-    const title = String(formData.get('title') ?? '').trim()
-    const content = String(formData.get('content') ?? '').trim()
-    if (!title || !content) return
-
-    setNotesSaving(true)
-    setNoteError(null)
-    try {
-      await createNote({ symbol, title, content })
-      const response = await getNotesBySymbol(symbol)
-      setNotes(response.data ?? [])
-      form.reset()
-      setNoteEditorOpen(false)
-    } catch (err) {
-      console.warn('Unable to create note:', err)
-      setNoteError('Unable to save note.')
-    } finally {
-      setNotesSaving(false)
-    }
-  }
-
-  const handleDeleteNote = async (noteId: string) => {
-    try {
-      await deleteNote(noteId)
-      setNotes((currentNotes) => currentNotes.filter((note) => note.id !== noteId))
-    } catch (err) {
-      console.warn('Unable to delete note:', err)
-      setNoteError('Unable to delete note.')
     }
   }
 
@@ -612,6 +544,11 @@ export default function StockDetailPage() {
           >
             {isFav ? '♥' : '♡'}
           </button>
+          {favoriteError && (
+            <span role="alert" style={{ color: '#ef5350', fontSize: '13px' }}>
+              {favoriteError}
+            </span>
+          )}
         </div>
       </header>
 
@@ -733,36 +670,8 @@ export default function StockDetailPage() {
       )}
 
       <div style={{ alignItems: 'stretch', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-        <button
-          type="button"
-          onClick={() => setNoteComposerOpen((isOpen) => !isOpen)}
-          aria-expanded={noteComposerOpen}
-          aria-label={noteComposerOpen ? 'Close notes panel' : 'Open notes'}
-          title={noteComposerOpen ? 'Close notes' : 'Open notes'}
-          style={{
-            alignItems: 'center',
-            backgroundColor: '#2962ff',
-            border: 0,
-            borderRadius: '50%',
-            boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3)',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            height: '44px',
-            justifyContent: 'center',
-            padding: 0,
-            position: 'fixed',
-            right: '24px',
-            bottom: '24px',
-            width: '44px',
-            zIndex: 21,
-          }}
-        >
-          <img
-            src={composeIcon}
-            alt=""
-            style={{ display: 'block', height: '28px', objectFit: 'contain', width: '28px' }}
-          />
-        </button>
+        <SymbolNotesPanel key={symbol} symbol={symbol} />
+
 
         <div style={{ display: 'flex', flex: '1 1 680px', flexDirection: 'column', minWidth: 0 }}>
           {/* Timeframe toolbar & hover breakdown */}
@@ -911,222 +820,6 @@ export default function StockDetailPage() {
           </div>
         </div>
 
-        {noteComposerOpen && (
-          <aside
-            aria-label={`Notes for ${symbol}`}
-            style={{
-              backgroundColor: '#131722',
-              border: '1px solid #1f293d',
-              borderRadius: '8px',
-              bottom: '24px',
-              boxShadow: '0 18px 44px rgba(0, 0, 0, 0.42)',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: 'min(620px, calc(100vh - 48px))',
-              maxWidth: 'calc(100vw - 92px)',
-              minWidth: '280px',
-              padding: '16px',
-              position: 'fixed',
-              right: '84px',
-              width: '340px',
-              zIndex: 20,
-            }}
-          >
-            <div
-              style={{
-                alignItems: 'center',
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: '12px',
-              }}
-            >
-              <div>
-                <h2 style={{ color: '#ffffff', fontSize: '17px', margin: 0 }}>Notes</h2>
-                <span style={{ color: '#9097a6', fontSize: '12px' }}>
-                  {notes.length} for {symbol}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setNoteComposerOpen(false)
-                  setNoteEditorOpen(false)
-                }}
-                aria-label="Close notes panel"
-                title="Close notes"
-                style={{
-                  background: 'transparent',
-                  border: 0,
-                  color: '#9097a6',
-                  cursor: 'pointer',
-                  fontSize: '24px',
-                  lineHeight: 1,
-                  padding: '4px',
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {noteEditorOpen && (
-              <form
-                onSubmit={handleCreateNote}
-                style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}
-              >
-                <input
-                  name="title"
-                  placeholder="Note title"
-                  required
-                  style={{
-                    backgroundColor: '#0e1117',
-                    border: '1px solid #2b2d3e',
-                    borderRadius: '4px',
-                    color: '#e1e3e6',
-                    font: 'inherit',
-                    padding: '8px',
-                  }}
-                />
-                <textarea
-                  name="content"
-                  placeholder="Write your research note..."
-                  required
-                  rows={4}
-                  style={{
-                    backgroundColor: '#0e1117',
-                    border: '1px solid #2b2d3e',
-                    borderRadius: '4px',
-                    color: '#e1e3e6',
-                    font: 'inherit',
-                    padding: '8px',
-                    resize: 'vertical',
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={notesSaving}
-                  style={{
-                    backgroundColor: '#2962ff',
-                    border: 0,
-                    borderRadius: '4px',
-                    color: '#ffffff',
-                    cursor: notesSaving ? 'wait' : 'pointer',
-                    fontWeight: 700,
-                    justifySelf: 'start',
-                    padding: '8px 10px',
-                  }}
-                >
-                  {notesSaving ? 'Saving...' : 'Save note'}
-                </button>
-              </form>
-            )}
-
-            {noteError && (
-              <p style={{ color: '#ef5350', fontSize: '13px', margin: '0 0 10px' }}>{noteError}</p>
-            )}
-            <div style={{ display: 'grid', gap: '10px', overflowY: 'auto', paddingRight: '4px' }}>
-              {notesLoading ? (
-                <p style={{ color: '#9097a6', fontSize: '14px', margin: 0 }}>Loading notes...</p>
-              ) : notes.length === 0 ? (
-                <p style={{ color: '#9097a6', fontSize: '14px', margin: 0 }}>
-                  No notes for this symbol yet.
-                </p>
-              ) : (
-                notes.map((note) => (
-                  <article
-                    key={note.id}
-                    style={{ borderTop: '1px solid #1f293d', paddingTop: '10px' }}
-                  >
-                    <div
-                      style={{
-                        alignItems: 'center',
-                        display: 'flex',
-                        gap: '10px',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <strong
-                        style={{
-                          color: '#ffffff',
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {note.title}
-                      </strong>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteNote(note.id)}
-                        aria-label={`Delete note: ${note.title}`}
-                        title="Delete note"
-                        style={{
-                          alignItems: 'center',
-                          background: 'transparent',
-                          border: 0,
-                          color: '#ef5350',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          flexShrink: 0,
-                          height: '28px',
-                          justifyContent: 'center',
-                          padding: '3px',
-                          width: '28px',
-                        }}
-                      >
-                        <svg
-                          aria-hidden="true"
-                          fill="none"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          width="20"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v5" />
-                          <path d="M14 11v5" />
-                        </svg>
-                      </button>
-                    </div>
-                    <p
-                      style={{
-                        color: '#d1d4dc',
-                        fontSize: '14px',
-                        margin: '7px 0 0',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {note.content}
-                    </p>
-                  </article>
-                ))
-              )}
-              {!notesLoading && (
-                <button
-                  type="button"
-                  onClick={() => setNoteEditorOpen((isOpen) => !isOpen)}
-                  style={{
-                    background: 'transparent',
-                    border: '1px dashed #3b5c9c',
-                    borderRadius: '4px',
-                    color: '#78a6ff',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    marginTop: '4px',
-                    padding: '9px',
-                  }}
-                >
-                  {noteEditorOpen ? 'Cancel note' : 'Add note'}
-                </button>
-              )}
-            </div>
-          </aside>
-        )}
       </div>
     </div>
   )

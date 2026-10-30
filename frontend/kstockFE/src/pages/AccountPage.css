@@ -16,8 +16,7 @@
 }
 
 .account-header h1,
-.account-section h2,
-.account-note h3 { margin: 0; }
+.account-section h2 { margin: 0; }
 
 .account-header h1 { font-size: 32px; }
 
@@ -33,8 +32,7 @@
 .account-avatar,
 .account-tabs button,
 .favorite-grid button,
-.account-form button,
-.note-symbol {
+.account-form button {
   border: 0;
   font: inherit;
 }
@@ -94,7 +92,7 @@
 
 .account-section-heading { margin-bottom: 24px; }
 .account-section-heading h2 { font-size: 20px; }
-.account-section-heading p, .account-status, .account-note p, .account-note time { color: #abb5cb; }
+.account-section-heading p, .account-status { color: #abb5cb; }
 .account-section-heading p { margin: 8px 0 0; }
 .account-password-heading { margin-top: 36px; }
 .account-error { color: #ff8b8b; }
@@ -203,19 +201,6 @@
 .favorite-grid { display: flex; flex-wrap: wrap; gap: 10px; }
 .favorite-grid button { background: #1b2540; color: #edf2ff; }
 .favorite-grid button:hover { background: #2962ff; }
-
-.note-list { display: grid; gap: 12px; }
-.account-note {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 16px 0 0;
-}
-.account-note h3 { font-size: 16px; }
-.account-note p { margin: 8px 0; white-space: pre-wrap; }
-.account-note time { font-size: 12px; }
-.note-symbol { align-self: start; border-radius: 5px; background: #1b2540; color: #a8dff0; cursor: pointer; padding: 7px; font-weight: 700; }
 
 @media (max-width: 700px) {
   .account-page { padding: 24px 16px; }
